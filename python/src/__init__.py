@@ -6,7 +6,6 @@ SIP协议完整实现
 # 常量
 from .crypto.hkdf import KDF_SALT, KDF_INFO
 from .crypto.aes_gcm import AES_GCM_NONCE_LENGTH
-from .crypto.argon2 import NONCE_LENGTH
 from .protocol.handshake import HANDSHAKE_NONCE_LENGTH
 from .protocol.group import MESSAGE_KEY_LENGTH, CHAIN_KEY_LENGTH
 

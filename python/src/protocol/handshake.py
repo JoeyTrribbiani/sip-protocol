@@ -4,7 +4,10 @@
 """
 
 import json
+import os
 import time
+from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives import serialization
 from .crypto.dh import generate_keypair, dh_exchange
 from .crypto.argon2 import hash_psk
 from .crypto.hkdf import derive_keys
@@ -61,12 +64,10 @@ async def respond_handshake(handshake_hello: dict, psk: bytes):
     Returns:
         Tuple[dict, dict, dict]: (handshake_auth, agent_state, session_keys)
     """
-    from cryptography.hazmat.primitives import serialization
-    import os
 
     # 解析Handshake_Hello
-    ephemeral_public_key = serialization.Encoding.Raw.load(
-        handshake_hello["ephemeral_public_key"]
+    ephemeral_public_key = x25519.X25519PublicKey.from_public_bytes(
+        bytes.fromhex(handshake_hello["ephemeral_public_key"])
     )
     remote_nonce = bytes.fromhex(handshake_hello["nonce"])
 
@@ -81,11 +82,6 @@ async def respond_handshake(handshake_hello: dict, psk: bytes):
     psk_hash, _ = await hash_psk(psk)
 
     # 派生会话密钥
-    session_keys = {
-        "encryption_key": derive_keys[0],
-        "auth_key": derive_keys[1],
-        "replay_key": derive_keys[2]
-    }
     session_keys = derive_keys(shared_secret, psk_hash, nonce, remote_nonce)
 
     # 构建Handshake_Auth消息
