@@ -8,8 +8,9 @@ XChaCha20-Poly1305加密模块
 JavaScript版本使用@noble/ciphers的XChaCha20-Poly1305（24字节nonce）。
 """
 
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import os
+
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 NONCE_LENGTH = 12  # ChaCha20-Poly1305使用12字节nonce（Python cryptography库限制）
 

@@ -11,7 +11,6 @@ from typing import Optional
 from ..crypto.xchacha20_poly1305 import (
     encrypt_xchacha20_poly1305,
     decrypt_xchacha20_poly1305,
-    NONCE_LENGTH,
     generate_nonce,
 )
 
@@ -89,7 +88,7 @@ def decrypt_message(encryption_key: bytes, message: dict) -> str:
         plaintext = decrypt_xchacha20_poly1305(encryption_key, ciphertext, iv, auth_tag)
         return plaintext.decode()
     except Exception as error:
-        raise Exception(f"解密失败：{error}")
+        raise ValueError(f"解密失败：{error}") from error
 
 
 def generate_replay_tag(replay_key: bytes, sender_id: str, message_counter: int) -> str:

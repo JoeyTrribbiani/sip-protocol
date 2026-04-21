@@ -7,7 +7,7 @@ import json
 import hashlib
 import time
 import base64
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 MAX_MESSAGE_SIZE = 1024 * 1024  # 1MB

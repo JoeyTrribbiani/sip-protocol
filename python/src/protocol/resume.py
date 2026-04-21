@@ -8,7 +8,7 @@ import base64
 import time
 import hmac
 import hashlib
-from typing import Dict, Optional, Tuple
+from typing import Dict
 from dataclasses import dataclass, asdict
 
 SESSION_TTL = 24 * 60 * 60  # 会话过期时间（24小时）

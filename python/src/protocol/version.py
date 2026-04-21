@@ -2,8 +2,7 @@
 协议版本协商模块
 """
 
-import json
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 PROTOCOL_VERSIONS = ["SIP-1.0", "SIP-1.1", "SIP-1.2", "SIP-1.3"]
 DEFAULT_VERSION = "SIP-1.0"
@@ -22,7 +21,6 @@ def negotiate_version(supported_versions: List[str], remote_supported: List[str]
     """
     # 按版本号排序（从高到低）
     supported_sorted = sorted(supported_versions, reverse=True)
-    remote_sorted = sorted(remote_supported, reverse=True)
 
     # 找到双方都支持的最新版本
     for version in supported_sorted:
@@ -84,15 +82,13 @@ def version_compare(version1: str, version2: str) -> int:
 
     if v1_major < v2_major:
         return -1
-    elif v1_major > v2_major:
+    if v1_major > v2_major:
         return 1
-    else:
-        if v1_minor < v2_minor:
-            return -1
-        elif v1_minor > v2_minor:
-            return 1
-        else:
-            return 0
+    if v1_minor < v2_minor:
+        return -1
+    if v1_minor > v2_minor:
+        return 1
+    return 0
 
 
 def is_backward_compatible(old_version: str, new_version: str) -> bool:

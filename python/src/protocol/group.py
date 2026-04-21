@@ -6,6 +6,7 @@
 import base64
 import hmac
 import hashlib
+import os
 import time
 import json
 from ..crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm, AES_GCM_NONCE_LENGTH
@@ -79,8 +80,6 @@ class GroupManager:
         Returns:
             Tuple[str, dict]: (消息JSON字符串, 更新后的发送链状态)
         """
-        import os
-
         # 1. 派生消息密钥
         message_key = hkdf(sending_chain["chain_key"], b"", b"message-key", MESSAGE_KEY_LENGTH)
 

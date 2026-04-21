@@ -4,6 +4,7 @@
 
 import json
 import base64
+import time
 
 PROTOCOL_VERSION = "SIP-1.0"
 
@@ -36,7 +37,6 @@ class SessionState:
         Returns:
             str: Base64编码的JSON字符串
         """
-        import time
 
         state_dict = {
             "version": self.version,
@@ -87,7 +87,6 @@ class SessionState:
         Returns:
             SessionState: 会话状态对象
         """
-        import time
 
         json_str = base64.b64decode(serialized).decode()
         state_dict = json.loads(json_str)
@@ -134,6 +133,5 @@ class SessionState:
         """
         更新最后活动时间
         """
-        import time
 
         self.last_activity_at = int(time.time() * 1000)

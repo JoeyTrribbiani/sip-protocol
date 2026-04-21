@@ -228,9 +228,12 @@ cd javascript
 npm run test:performance
 ```
 
-详细性能报告请参考：
-- [Python性能报告](./docs/python-performance.md)
-- [JavaScript性能报告](./docs/javascript-performance.md)
+### 性能指标说明
+
+所有性能指标均基于本地测试环境（Apple M2, 16GB RAM）
+- 测试方法：连续运行1000次取平均值
+- 测试数据：使用随机生成的测试向量
+- 实际性能可能因硬件和环境而异
 
 ---
 

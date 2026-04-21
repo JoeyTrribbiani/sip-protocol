@@ -4,8 +4,7 @@ PSK哈希模块
 """
 
 from typing import Optional
-from argon2 import PasswordHasher, low_level
-import os
+from argon2 import low_level
 
 # 固定盐（用于测试）
 FIXED_SALT = b"SIPProtocolTestSalt"  # 16字节

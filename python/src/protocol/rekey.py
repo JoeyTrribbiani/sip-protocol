@@ -3,7 +3,6 @@ Rekey密钥轮换模块
 实现密钥轮换流程（前向保密）
 """
 
-import json
 import os
 import time
 import hmac
@@ -135,7 +134,7 @@ class RekeyManager:
 
             return True
 
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             return False
 
     def process_rekey_request(self, rekey_request: dict) -> dict:
@@ -256,7 +255,7 @@ class RekeyManager:
 
             return True
 
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             return False
 
     def process_rekey_response(self, rekey_response: dict) -> dict:
