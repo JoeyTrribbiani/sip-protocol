@@ -40,9 +40,20 @@ from argon2 import PasswordHasher
 #   shared_3 = ephemeral_private_b × ephemeral_public_a (响应方临时 × 发起方临时)
 # 注意：由于X25519的对称性，shared_1和shared_2在双方视角下是交换的
 # 但必须按照相同的顺序组合，才能派生出相同的会话密钥
-shared_1 = identity_local * remote_ephemeral  # 本地身份 * 远程临时
-shared_2 = ephemeral_local * remote_identity  # 本地临时 * 远程身份
-shared_3 = ephemeral_local * remote_ephemeral  # 本地临时 * 远程临时
+# 注意：以下代码是示例，实际使用时需要使用真实的密钥对象和exchange()方法
+# shared_1 = identity_local.exchange(remote_ephemeral_public_key)  # 本地身份 * 远程临时
+# shared_2 = ephemeral_local.exchange(remote_identity_public_key)  # 本地临时 * 远程身份
+# shared_3 = ephemeral_local.exchange(remote_ephemeral_public_key)  # 本地临时 * 远程临时
+
+# 说明：
+# 在实际实现中，identity_local、ephemeral_local等应该是X25519PrivateKey对象
+# remote_ephemeral、remote_identity等应该是X25519PublicKey对象
+# 使用private_key.exchange(public_key)方法进行DH密钥交换
+
+# 示例（伪代码）：
+# shared_1 = identity_local.exchange(remote_ephemeral_public_key)
+# shared_2 = ephemeral_local.exchange(remote_identity_public_key)
+# shared_3 = ephemeral_local.exchange(remote_ephemeral_public_key)
 
 # PSK 哈希（防止 MITM 攻击）
 psk = b"<YOUR_PRE_SHARED_KEY_HERE>"  # 从配置或环境变量获取
