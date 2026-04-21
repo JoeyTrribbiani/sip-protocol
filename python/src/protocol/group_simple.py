@@ -121,7 +121,7 @@ class SimpleGroupManager:
 
         plaintext = decrypt_aes_gcm(self.group_encryption_key, ciphertext, iv, auth_tag)
 
-        return plaintext
+        return plaintext.decode() if isinstance(plaintext, bytes) else plaintext
 
     def get_member_count(self) -> int:
         """获取成员数量"""
