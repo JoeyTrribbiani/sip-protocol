@@ -1,0 +1,13 @@
+{
+  "name": "sip-protocol",
+  "version": "1.0.0",
+  "description": "SIP Protocol - 基于Signal Double Ratchet的多Agent端到端加密通信协议",
+  "scripts": {
+    "prepare": "husky",
+    "precommit": "cd javascript && npm run lint:fix && npm test"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.11"
+  }
+}

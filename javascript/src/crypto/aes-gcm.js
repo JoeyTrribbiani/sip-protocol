@@ -16,14 +16,13 @@ const AES_GCM_NONCE_LENGTH = 12;
  */
 function encryptAESGCM(key, plaintext, iv) {
   const aesgcm = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const ciphertextWithTag = Buffer.concat([
+  const ciphertext = Buffer.concat([
     aesgcm.update(plaintext),
     aesgcm.final()
   ]);
   
-  const authTagLength = 16; // AES-GCM的认证标签是16字节
-  const ciphertext = ciphertextWithTag.slice(0, -authTagLength);
-  const authTag = ciphertextWithTag.slice(-authTagLength);
+  // Node.js的AES-GCM：final()返回纯密文，认证标签需要单独获取
+  const authTag = aesgcm.getAuthTag();
   
   return { ciphertext, authTag };
 }

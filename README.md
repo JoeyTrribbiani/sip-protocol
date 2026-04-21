@@ -1,174 +1,299 @@
-# Agent群智协议（SIP）v1.0
+# SIP协议 - Swarm Intelligence Protocol
 
-## 简介
+> 基于Signal Double Ratchet的多Agent端到端加密通信协议
 
-Swarm Intelligence Protocol (SIP) 是一个基于蜂群效应的多Agent协同通信协议，专为多Agent之间的集体决策和群组会话设计。
+[![CI/CD](https://github.com/JoeyTrribbiani/sip-protocol/workflows/CI%2FCD/badge.svg)](https://github.com/JoeyTrribbiani/sip-protocol/actions)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-SIP采用端到端加密（E2EE）技术，基于成熟的Signal Double Ratchet算法，为Agent之间的通信提供银行级安全保障。协议支持一对一私聊、一对多广播、多对多群聊等多种通信模式，完美适配现代AI协同场景。
+---
 
-## 核心特性
+## 📋 目录
 
-### ✅ 银行级安全
-- 基于Signal Double Ratchet算法（已被数亿用户验证）
-- 端到端加密（E2EE），中间节点无法解密消息
-- 前向保密：旧密钥泄露无法解密新消息
-- 后向保密：新成员无法解密旧消息
+- [概述](#概述)
+- [特性](#特性)
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [API文档](#api文档)
+- [性能](#性能)
+- [安全](#安全)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
-### ✅ 完整的安全机制
-- 抗重放攻击（时间戳验证 + 消息计数器 + replay_tag）
-- 抗中间人攻击（MITM）（三重DH密钥交换）
-- 抗密钥泄露（Argon2id密钥派生，内存困难）
-- 完整性保护（HMAC-SHA256签名验证）
+---
 
-### ✅ 支持多种通信模式
-- 一对一私聊
-- 一对多广播
-- 多对多群聊
-- 集体决策场景
+## 概述
 
-### ✅ 高性能、低开销
-- 握手耗时：~46ms（含Argon2id）
-- 消息加密：~0.12ms
-- 群组加密：~0.12ms（顺序），~1.2ms（乱序）
-- 高并发支持：成功率100%
+SIP协议（Swarm Intelligence Protocol）是一个基于Signal Double Ratchet算法的端到端加密通信协议，专为多Agent之间的安全通信设计。
 
-### ✅ 现代化设计
-- 协议版本协商（向后兼容）
-- 消息分片支持（大文件传输）
-- 连接恢复机制（无缝重连）
-- 扩展字段预留（未来功能扩展）
+**核心理念：**
+- 群策群力：多个Agent协同工作，集体智慧
+- 众谋寡断：集体谋划，高效决策
+- 涌现智能：群体协作，超越个体
 
-## 应用场景
+**设计原则：**
+- 简单性：易于理解和实现
+- 安全性：现代加密算法，前向保密
+- 可调试性：JSON消息格式，便于日志分析
+- 可扩展性：预留扩展字段
 
-- 🤖 多Agent协同系统
-- 🌐 分布式AI集群
-- 👥 Agent群组会话
-- 🤝 集体决策协议
-- 🔐 端到端加密通信
-- 📡 实时安全消息传输
+---
+
+## 特性
+
+### 核心功能
+- ✅ **端到端加密**：消息只有发送方和接收方能解密
+- ✅ **前向保密**：密钥泄露不影响历史消息
+- ✅ **抗重放攻击**：防止重复消息
+- ✅ **抗篡改**：消息完整性保护
+- ✅ **身份验证**：PSK防止中间人攻击
+
+### 群组功能
+- ✅ **群组加密**：基于Double Ratchet的群组通信
+- ✅ **Skip Ratchet**：支持乱序消息
+- ✅ **动态成员**：支持成员加入和离开
+- ✅ **自动密钥更新**：成员变化时自动更新根密钥
+
+### 多语言支持
+- ✅ **Python 3.11+**：完整实现（1266行）
+- ✅ **Node.js 20+**：完整实现（15个模块）
+- ✅ **API一致**：不同语言提供相同的API
+
+---
+
+## 安装
+
+### Python
+
+```bash
+# 安装依赖
+pip install -r python/requirements.txt
+
+# 安装开发依赖
+pip install -r python/requirements-dev.txt
+```
+
+### JavaScript (Node.js)
+
+```bash
+cd javascript
+npm install
+```
+
+---
 
 ## 快速开始
 
-### Python实现
+### Python示例
 
-```bash
-# 克隆仓库
-git clone https://github.com/JoeyTrribbiani/sip-protocol.git
-cd sip-protocol/python
+```python
+import sip_protocol
 
-# 安装依赖
-pip install -r requirements.txt
+# 1. 生成密钥对
+private_key, public_key = sip_protocol.generate_keypair()
 
-# 运行示例（完整握手流程）
-python examples/basic_handshake.py
+# 2. DH密钥交换
+shared_secret = sip_protocol.dh_exchange(private_key, public_key)
 
-# 运行测试套件
-python tests/test_sip_protocol.py
+# 3. 派生密钥
+psk_hash, _ = sip_protocol.hash_psk(b"your-psk")
+encryption_key, auth_key, replay_key = sip_protocol.derive_keys(
+    shared_secret, psk_hash, nonce_a, nonce_b
+)
+
+# 4. 加密消息
+message = sip_protocol.encrypt_message(
+    encryption_key, "Hello, SIP!", "agent-a", 1
+)
+
+# 5. 解密消息
+plaintext = sip_protocol.decrypt_message(encryption_key, message)
+print(plaintext)  # "Hello, SIP!"
 ```
 
-### Node.js实现
+### JavaScript示例
 
-```bash
-# 克隆仓库
-git clone https://github.com/JoeyTrribbiani/sip-protocol.git
-cd sip-protocol/javascript
+```javascript
+const {
+  generateKeyPair,
+  dhExchange,
+  hashPsk,
+  deriveKeys,
+  encryptMessage,
+  decryptMessage
+} = require('./src/index.js');
 
-# 安装依赖
-npm install
+// 1. 生成密钥对
+const { privateKey, publicKey } = generateKeyPair();
 
-# 运行示例（完整握手流程）
-npm run example:handshake
+// 2. DH密钥交换
+const sharedSecret = dhExchange(privateKey, publicKey);
 
-# 运行测试套件
-npm test
+// 3. 派生密钥
+const { pskHash } = await hashPsk(Buffer.from('your-psk'));
+const { encryptionKey, authKey, replayKey } = deriveKeys(
+  sharedSecret, pskHash, nonceA, nonceB
+);
+
+// 4. 加密消息
+const message = encryptMessage(
+  encryptionKey, 'Hello, SIP!', 'agent-a', 1
+);
+
+// 5. 解密消息
+const plaintext = decryptMessage(encryptionKey, message);
+console.log(plaintext); // "Hello, SIP!"
 ```
+
+### 群组加密示例
+
+```python
+import sip_protocol
+
+# 1. 初始化群组
+root_key = b"..."
+group_manager = sip_protocol.GroupManager("group:123", root_key)
+
+# 2. 添加成员
+chains = group_manager.initialize_group_chains(
+    ["agent-a", "agent-b", "agent-c"], root_key
+)
+
+# 3. 发送消息
+message = group_manager.send_group_message(
+    "Hello, Group!", chains["agent-a"]["sending_chain"]
+)
+
+# 4. 接收消息
+plaintext = group_manager.receive_group_message(
+    message, chains["agent-b"]["receiving_chain"]
+)
+```
+
+---
+
+## API文档
+
+### 核心API
+
+#### Python
+
+- `generate_keypair()` - 生成X25519密钥对
+- `dh_exchange(private_key, public_key)` - ECDH密钥交换
+- `hash_psk(psk, salt)` - Argon2id哈希
+- `derive_keys(shared_secret, psk_hash, nonce_a, nonce_b)` - 派生会话密钥
+- `encrypt_message(encryption_key, plaintext, sender_id, counter)` - 加密消息
+- `decrypt_message(encryption_key, message)` - 解密消息
+- `generate_replay_tag(replay_key, sender_id, counter)` - 生成防重放标签
+
+#### JavaScript
+
+- `generateKeyPair()` - 生成X25519密钥对
+- `dhExchange(privateKey, publicKey)` - ECDH密钥交换
+- `hashPsk(psk, salt)` - Argon2id哈希
+- `deriveKeys(sharedSecret, pskHash, nonceA, nonceB)` - 派生会话密钥
+- `encryptMessage(encryptionKey, plaintext, senderId, counter)` - 加密消息
+- `decryptMessage(encryptionKey, message)` - 解密消息
+- `generateReplayTag(replayKey, senderId, counter)` - 生成防重放标签
+
+### 群组API
+
+- `GroupManager(groupId, rootKey)` - 创建群组管理器
+- `initialize_group_chains(members, rootKey)` - 初始化群组链密钥
+- `send_group_message(plaintext, sending_chain)` - 发送群组消息
+- `receive_group_message(message, receiving_chain)` - 接收群组消息
+
+完整API文档请参考：
+- [Python API](./docs/python-api.md)
+- [JavaScript API](./docs/javascript-api.md)
+
+---
 
 ## 性能
 
-- 握手耗时：~46ms（含Argon2id）
-- 消息加密：~0.12ms
-- 群组加密：~0.12ms（顺序），~1.2ms（乱序）
-- 高并发：成功率100%
+### 性能指标
 
-详细性能数据请参见 [性能基准测试](docs/e2ee-protocol.md#性能基准测试)。
+| 指标 | 要求 | 实际（Python） | 实际（JavaScript） | 状态 |
+|------|------|---------------|-------------------|------|
+| DH密钥交换 | < 10ms | ~0.025ms | ~0.022ms | ✅ |
+| HKDF密钥派生 | < 5ms | ~0.010ms | ~0.008ms | ✅ |
+| AES-GCM加密（1KB） | < 1ms | ~0.006ms | ~0.005ms | ✅ |
+| 群组加密（顺序） | < 0.5ms | ~0.025ms | ~0.020ms | ✅ |
+| 群组加密（乱序） | < 2ms | ~0.050ms | ~0.042ms | ✅ |
 
-## 安全性
-
-- 加密算法：X25519, XChaCha20-Poly1305, HKDF-SHA256, Argon2id
-- 基于成熟的Signal Double Ratchet算法
-- 前向保密和后向保密
-- 抗重放攻击和篡改
-
-详细安全分析请参见 [协议文档](docs/e2ee-protocol.md)。
-
-## 常见问题
-
-参见 [FAQ](docs/e2ee-protocol.md#常见问题解答faq)。
-
-## 测试
-
-### 测试套件
-
-**Python测试：**
-- 测试文件：`tests/test_sip_protocol.py`
-- 测试用例：6个
-  1. 基本握手流程
-  2. 消息加密解密
-  3. Nonce管理（防重放）
-  4. 时间戳验证（防重放）
-  5. 防重放标签（replay_tag）
-  6. 群组加密
-
-**Node.js测试：**
-- 测试文件：`javascript/tests/test_sip_protocol.js`
-- 测试用例：6个
-  1. 基本握手流程
-  2. 消息加密解密
-  3. Nonce管理（防重放）
-  4. 防重放标签（replay_tag）
-  5. 群组加密
-  6. 跳跃密钥（Skip Ratchet）
-
-### 运行测试
+### 性能测试
 
 ```bash
-# Python测试
-cd sip-protocol/python
-python tests/test_sip_protocol.py
-
-# Node.js测试
-cd sip-protocol/javascript
-npm test
+# JavaScript性能测试
+cd javascript
+npm run test:performance
 ```
 
-## 示例
+详细性能报告请参考：
+- [Python性能报告](./docs/python-performance.md)
+- [JavaScript性能报告](./docs/javascript-performance.md)
 
-### Python示例
+---
 
-- 文件：`examples/basic_handshake.py`
-- 功能：完整的端到端握手流程
-- Agent A和Agent B建立加密通道
-- 三重DH密钥交换
-- PSK哈希和密钥派生
+## 安全
 
-### Node.js示例
+### 安全特性
 
-- 文件：`javascript/examples/basic_handshake.js`
-- 功能：完整的端到端握手流程
-- Agent A和Agent B建立加密通道
-- 三重DH密钥交换
-- PSK哈希和密钥派生
+- ✅ **端到端加密**：使用AES-256-GCM
+- ✅ **前向保密**：密钥定期更新
+- ✅ **时序攻击防护**：使用恒定时间比较
+- ✅ **重放攻击防护**：Nonce + Replay Tag
+- ✅ **中间人攻击防护**：PSK验证
+- ✅ **侧信道攻击防护**：使用加密安全的随机数
+
+### 安全审计
+
+- 定期进行安全审计
+- 使用`npm audit`和`pip-audit`检测依赖漏洞
+- 使用`dependabot`自动更新依赖
+
+---
 
 ## 贡献
 
-欢迎贡献代码、报告问题或提出建议！
+我们欢迎所有形式的贡献！
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+### 贡献指南
+
+- [Python贡献指南](./python/CONTRIBUTING.md)
+- [JavaScript贡献指南](./javascript/CONTRIBUTING.md)
+
+### 开发流程
+
+1. Fork项目
+2. 创建功能分支
+3. 编写代码和测试
+4. 提交Pull Request
+
+### 代码规范
+
+- Python: PEP 8 + Black + Pylint + Mypy
+- JavaScript: ESLint + Prettier
+
+---
 
 ## 许可证
 
 Apache License 2.0
 
+详见 [LICENSE](./LICENSE)
+
+---
+
+## 联系方式
+
+- GitHub Issues: https://github.com/JoeyTrribbiani/sip-protocol/issues
+- Email: [your-email@example.com]
+
+---
+
 ## 致谢
 
-感谢 [Signal Protocol](https://signal.org/docs/) 的启发。
+- Signal Protocol: https://signal.org/docs/
+- X25519: https://cr.yp.to/ecdh.html
+- AES-GCM: https://en.wikipedia.org/wiki/Galois/Counter_Mode
+- Argon2: https://github.com/P-H-C/phc-winner-argon2

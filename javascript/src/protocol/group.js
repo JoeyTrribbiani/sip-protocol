@@ -37,21 +37,17 @@ class GroupManager {
     const chains = {};
 
     for (const member of members) {
-      // 派生sending chain key
+      // 派生sending chain key - 用于发送消息
       const sendingChainKey = hkdf(
         rootKey,
-        Buffer.from(`${member}:sending`),
+        Buffer.from(member),
         Buffer.from('sending-chain'),
         CHAIN_KEY_LENGTH
       );
 
-      // 派生receiving chain key
-      const receivingChainKey = hkdf(
-        rootKey,
-        Buffer.from(`${member}:receiving`),
-        Buffer.from('receiving-chain'),
-        CHAIN_KEY_LENGTH
-      );
+      // 重要：接收方应该使用与发送方相同的密钥
+      // 这样发送方发送的消息，接收方才能用相同的密钥解密
+      const receivingChainKey = sendingChainKey;
 
       chains[member] = {
         sending_chain: {
@@ -160,9 +156,10 @@ class GroupManager {
     // 2. 检查消息类型并派生消息密钥
     if (messageNumber > expectedMsgNum) {
       // 乱序消息，预先生成跳跃密钥（Skip Ratchet算法）
-      for (let i = expectedMsgNum; i < messageNumber; i++) {
+      // 为从expectedMsgNum到messageNumber（包括messageNumber）的所有消息生成密钥
+      for (let i = expectedMsgNum; i <= messageNumber; i++) {
         if (!(i in receivingChain.skip_keys)) {
-          // 为每一条缺失的消息生成跳跃密钥
+          // 为每一条消息生成跳跃密钥
           const skippedKey = hkdf(
             receivingChain.chain_key,
             Buffer.alloc(0),
