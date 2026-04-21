@@ -1,6 +1,5 @@
 // SIP协议完整握手示例
 const crypto = require('crypto');
-const { x25519 } = require('@noble/ciphers');
 const argon2 = require('argon2');
 
 // 导入完整实现
@@ -38,7 +37,7 @@ function agentAInit() {
   return { privA, pubA, pskHashA, saltA, nonceA };
 }
 
-function agentBInit(saltA) {
+async function agentBInit(saltA) {
   console.log('\n=== Agent B初始化 ===');
   
   // 生成密钥对
@@ -47,7 +46,7 @@ function agentBInit(saltA) {
   
   // 使用相同的PSK和salt
   const psk = Buffer.from('shared-secret-key-12345678');
-  const { pskHash: pskHashB } = hashPsk(psk, saltA);
+  const { pskHash: pskHashB } = await hashPsk(psk, saltA);
   console.log('PSK哈希：', pskHashB.toString('hex').substring(0, 32) + '...');
   
   // 生成nonce
@@ -57,14 +56,14 @@ function agentBInit(saltA) {
   return { privB, pubB, pskHashB, nonceB };
 }
 
-function handshakeComplete() {
+async function handshakeComplete() {
   console.log('\n=== 握手流程 ===');
   
   // Agent A初始化
   const { privA, pubA, pskHashA, saltA, nonceA } = agentAInit();
   
   // Agent B初始化
-  const { privB, pubB, pskHashB, nonceB } = agentBInit(saltA);
+  const { privB, pubB, pskHashB, nonceB } = await agentBInit(saltA);
   
   // DH密钥交换（三重DH）
   console.log('\n=== DH密钥交换（三重DH）===');
@@ -149,7 +148,7 @@ function handshakeComplete() {
   console.log('✅ 现在可以使用加密通道进行通信！');
 }
 
-function main() {
+async function main() {
   console.log('');
   console.log('='.repeat(60));
   console.log('SIP协议完整握手示例 v1.0');
@@ -157,7 +156,7 @@ function main() {
   console.log('');
   
   try {
-    handshakeComplete();
+    await handshakeComplete();
   } catch (error) {
     console.log('\n❌ 握手失败：', error.message);
     console.error(error);

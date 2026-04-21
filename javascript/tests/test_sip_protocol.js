@@ -1,6 +1,5 @@
 // SIP协议测试脚本
 const crypto = require('crypto');
-const { x25519 } = require('@noble/ciphers');
 const argon2 = require('argon2');
 
 // 导入完整实现
@@ -18,7 +17,7 @@ const {
   GroupManager
 } = require('../sip_protocol_complete.js');
 
-function testBasicHandshake() {
+async function testBasicHandshake() {
   console.log('=== 测试1：基本握手流程 ===\n');
   
   // 生成密钥对
@@ -36,8 +35,8 @@ function testBasicHandshake() {
   
   // PSK哈希（可选）
   const psk = Buffer.from('shared-secret-key-12345678');
-  const { pskHash: pskHashA, salt: saltA } = hashPsk(psk);
-  const { pskHash: pskHashB } = hashPsk(psk, saltA);
+  const { pskHash: pskHashA, salt: saltA } = await hashPsk(psk);
+  const { pskHash: pskHashB } = await hashPsk(psk, saltA);
   
   console.log('✅ PSK哈希一致：', pskHashA.toString('hex') === pskHashB.toString('hex'));
   
@@ -154,8 +153,8 @@ function testGroupEncryption() {
   
   console.log('✅ 群组消息已发送：', message.ciphertext.substring(0, 32) + '...');
   
-  // 接收群组消息
-  const decrypted = groupManager.receiveGroupMessage(message, 'agent-a');
+  // 接收群组消息（agent-b接收agent-a的消息）
+  const decrypted = groupManager.receiveGroupMessage(message, 'agent-b');
   
   console.log('✅ 群组消息已解密：', decrypted === plaintext);
   console.log('✅ 测试5通过！\n');
@@ -204,7 +203,7 @@ function testSkipRatchet() {
   console.log('✅ 测试6通过！\n');
 }
 
-function main() {
+async function main() {
   console.log('');
   console.log('='.repeat(50));
   console.log('SIP协议测试套件 v1.0');
@@ -212,7 +211,7 @@ function main() {
   console.log('');
   
   try {
-    testBasicHandshake();
+    await testBasicHandshake();
     testMessageEncryption();
     testNonceManagement();
     testReplayTag();

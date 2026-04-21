@@ -1,7 +1,6 @@
-// SIP协议完整实现 - 按照协议文档
+// SIP协议完整实现 - 使用Node.js内置crypto模块（简化版）
 
 const crypto = require('crypto');
-const { x25519 } = require('@noble/ciphers');
 const argon2 = require('argon2');
 
 // 常量
@@ -15,40 +14,38 @@ const CHAIN_KEY_LENGTH = 32;
 const GROUP_PROTOCOL_VERSION = 'SIP-1.0';
 const AES_GCM_NONCE_LENGTH = 12;
 
-// 密钥对生成（按照协议文档）
+// 密钥对生成（使用Node.js内置X25519）
 function generateKeyPair() {
-  const privateKey = crypto.randomBytes(32);
-  const publicKey = x25519.getPublicKey(privateKey);
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');
   return { privateKey, publicKey };
 }
 
 // PSK 哈希（Argon2id）
-function hashPsk(psk, salt = null) {
-  // 如果没有提供盐，生成随机盐
+async function hashPsk(psk, salt = null) {
   if (!salt) {
     salt = crypto.randomBytes(16);
   }
   
-  // Argon2id 参数
   const options = {
     type: argon2.argon2id,
-    memoryCost: 65536,  // 64MB
-    timeCost: 3,        // 迭代次数
-    parallelism: 4,       // 并行线程数
-    hashLength: 32,      // 输出长度
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+    hashLength: 32,
     salt: salt,
-    raw: true            // 返回原始 Buffer
+    raw: true
   };
   
-  // 哈希 PSK
-  const pskHash = argon2.hash(psk, options);
-  
+  const pskHash = await argon2.hash(psk, options);
   return { pskHash, salt };
 }
 
-// DH 密钥交换（按照协议文档）
+// DH 密钥交换（使用Node.js内置X25519）
 function dhExchange(privateKey, publicKey) {
-  const sharedSecret = x25519.getSharedSecret(privateKey, publicKey);
+  const sharedSecret = crypto.diffieHellman({
+    privateKey,
+    publicKey
+  });
   return sharedSecret;
 }
 
@@ -60,19 +57,18 @@ function deriveKeys(sharedSecret, pskHash, nonceA, nonceB) {
     ikm,
     KDF_SALT,
     KDF_INFO,
-    96 // 3 * 32 bytes
+    96
   );
-  const encryptionKey = kdf.subarray(0, 32);
-  const authKey = kdf.subarray(32, 64);
-  const replayKey = kdf.subarray(64, 96);
+  const encryptionKey = kdf.slice(0, 32);
+  const authKey = kdf.slice(32, 64);
+  const replayKey = kdf.slice(64, 96);
   return { encryptionKey, authKey, replayKey };
 }
 
-// 加密消息（使用XChaCha20-Poly1305）
+// 加密消息（使用AES-256-GCM）
 function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
-  // 使用 @noble/ciphers 的 XChaCha20-Poly1305
-  const nonce = Buffer.alloc(NONCE_LENGTH, 0);
-  const cipher = crypto.createCipheriv('chacha20-poly1305', encryptionKey, nonce);
+  const iv = crypto.randomBytes(AES_GCM_NONCE_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
   
   let ciphertext;
   try {
@@ -86,13 +82,12 @@ function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
   
   const authTag = cipher.getAuthTag();
   
-  // 构建消息对象
   const message = {
     version: PROTOCOL_VERSION,
     type: 'encrypted_message',
     sender_id: senderId,
     message_counter: messageCounter,
-    nonce: nonce.toString('base64'),
+    nonce: iv.toString('base64'),
     ciphertext: ciphertext.toString('base64'),
     auth_tag: authTag.toString('base64'),
     timestamp: Date.now()
@@ -103,11 +98,11 @@ function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
 
 // 解密消息
 function decryptMessage(encryptionKey, message) {
-  const nonce = Buffer.from(message.nonce, 'base64');
+  const iv = Buffer.from(message.nonce, 'base64');
   const ciphertext = Buffer.from(message.ciphertext, 'base64');
   const authTag = Buffer.from(message.auth_tag, 'base64');
   
-  const decipher = crypto.createDecipheriv('chacha20-poly1305', encryptionKey, nonce);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey, iv);
   decipher.setAuthTag(authTag);
   
   let plaintext;
@@ -135,7 +130,7 @@ function generateReplayTag(replayKey, senderId, messageCounter) {
   return replayTag;
 }
 
-// Nonce管理器（防重放）
+// Nonce管理器
 class NonceManager {
   constructor() {
     this.usedNonces = new Set();
@@ -166,7 +161,7 @@ class MessageCounter {
   increment() {
     this.counter++;
     if (this.counter > this.maxCounter) {
-      this.counter = 0; // 回绕处理
+      this.counter = 0;
     }
     return this.counter;
   }
@@ -176,13 +171,12 @@ class MessageCounter {
   }
   
   validate(messageCounter) {
-    // 验证消息计数器在合理范围内
     return messageCounter > this.counter && 
-           messageCounter <= (this.counter + 10000); // 允许最多10000条乱序消息
+           messageCounter <= (this.counter + 10000);
   }
 }
 
-// 会话状态序列化/反序列化
+// 会话状态
 class SessionState {
   constructor() {
     this.version = PROTOCOL_VERSION;
@@ -213,7 +207,7 @@ class SessionState {
   }
 }
 
-// 群组加密支持
+// 群组管理器
 class GroupManager {
   constructor(groupId, rootKey) {
     this.groupId = groupId;
@@ -224,19 +218,16 @@ class GroupManager {
   }
   
   addMember(memberId, sendingChainKey) {
-    // 初始化成员的发送和接收链
     this.members.set(memberId, {
       sendingChain: {
         chainKey: sendingChainKey,
         messageNumber: 0,
         skipKeys: new Map()
-      },
-      receivingChains: new Map()
+      }
     });
     
-    // 初始化接收链（从root key派生）
     const receivingChainKey = crypto.createHash('sha256')
-      .update(rootKey)
+      .update(this.rootKey)
       .update(Buffer.from(memberId))
       .digest();
     
@@ -253,17 +244,14 @@ class GroupManager {
       throw new Error('成员不存在：' + senderId);
     }
     
-    // 派生消息密钥
     const messageKey = crypto.createHmac('sha256', member.sendingChain.chainKey)
       .update(Buffer.from('message-key'))
       .digest();
     
-    // 推进链密钥
     const nextChainKey = crypto.createHmac('sha256', member.sendingChain.chainKey)
       .update(Buffer.from('chain-key'))
       .digest();
     
-    // 加密消息
     const iv = crypto.randomBytes(AES_GCM_NONCE_LENGTH);
     const cipher = crypto.createCipheriv('aes-256-gcm', messageKey, iv);
     
@@ -279,11 +267,9 @@ class GroupManager {
     
     const authTag = cipher.getAuthTag();
     
-    // 更新发送链状态
     member.sendingChain.chainKey = nextChainKey;
     member.sendingChain.messageNumber++;
     
-    // 构建群组消息
     const message = {
       version: GROUP_PROTOCOL_VERSION,
       type: 'group_message',
@@ -305,22 +291,18 @@ class GroupManager {
       throw new Error('成员不存在：' + memberId);
     }
     
-    const receivingChain = member.receivingChains.get('default');
+    const receivingChain = this.receivingChains.get(memberId);
     const messageNumber = message.message_number;
     const expectedMsgNum = receivingChain.messageNumber;
     
-    // 检查是否是乱序消息
     if (messageNumber > expectedMsgNum) {
-      // 预先生成跳跃密钥（Skip Ratchet算法）
       for (let i = expectedMsgNum; i < messageNumber; i++) {
         if (!receivingChain.skipKeys.has(i)) {
-          // 为每一条缺失的消息生成跳跃密钥
           const skippedKey = crypto.createHmac('sha256', receivingChain.chainKey)
             .update(Buffer.from('message-key'))
             .digest();
           receivingChain.skipKeys.set(i, skippedKey);
           
-          // 推进链密钥
           const nextChainKey = crypto.createHmac('sha256', receivingChain.chainKey)
             .update(Buffer.from('chain-key'))
             .digest();
@@ -328,13 +310,9 @@ class GroupManager {
         }
       }
       
-      // 使用目标messageNumber对应的跳跃密钥
       const messageKey = receivingChain.skipKeys.get(messageNumber);
-      
-      // 清理已使用的跳跃密钥
       receivingChain.skipKeys.delete(messageNumber);
       
-      // 解密消息
       const iv = Buffer.from(message.iv, 'base64');
       const ciphertext = Buffer.from(message.ciphertext, 'base64');
       const authTag = Buffer.from(message.auth_tag, 'base64');
@@ -352,7 +330,6 @@ class GroupManager {
         throw new Error('解密失败：' + error.message);
       }
       
-      // 更新接收链状态
       const nextChainKey = crypto.createHmac('sha256', receivingChain.chainKey)
         .update(Buffer.from('chain-key'))
         .digest();
@@ -361,12 +338,10 @@ class GroupManager {
       
       return plaintext;
     } else {
-      // 顺序消息，正常处理
       const messageKey = crypto.createHmac('sha256', receivingChain.chainKey)
         .update(Buffer.from('message-key'))
         .digest();
       
-      // 解密消息
       const iv = Buffer.from(message.iv, 'base64');
       const ciphertext = Buffer.from(message.ciphertext, 'base64');
       const authTag = Buffer.from(message.auth_tag, 'base64');
@@ -384,7 +359,6 @@ class GroupManager {
         throw new Error('解密失败：' + error.message);
       }
       
-      // 推进链密钥
       const nextChainKey = crypto.createHmac('sha256', receivingChain.chainKey)
         .update(Buffer.from('chain-key'))
         .digest();
@@ -395,15 +369,12 @@ class GroupManager {
     }
   }
   
-  // 更新root key（成员加入/离开时）
   updateRootKey(newRootKey) {
     this.rootKey = newRootKey;
     
-    // 更新所有成员的接收链
     for (const [memberId] of this.members.keys()) {
       const member = this.members.get(memberId);
       
-      // 重新派生接收链密钥
       const receivingChainKey = crypto.createHash('sha256')
         .update(newRootKey)
         .update(Buffer.from(memberId))
@@ -418,9 +389,7 @@ class GroupManager {
   }
 }
 
-// 导出
 module.exports = {
-  // 常量
   PROTOCOL_VERSION,
   KDF_SALT,
   KDF_INFO,
@@ -430,8 +399,6 @@ module.exports = {
   CHAIN_KEY_LENGTH,
   GROUP_PROTOCOL_VERSION,
   AES_GCM_NONCE_LENGTH,
-  
-  // 基础功能
   generateKeyPair,
   hashPsk,
   dhExchange,
@@ -439,8 +406,6 @@ module.exports = {
   encryptMessage,
   decryptMessage,
   generateReplayTag,
-  
-  // 高级功能
   NonceManager,
   MessageCounter,
   SessionState,
