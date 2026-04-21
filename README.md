@@ -59,8 +59,11 @@ cd sip-protocol/python
 # 安装依赖
 pip install -r requirements.txt
 
-# 运行示例
+# 运行示例（完整握手流程）
 python examples/basic_handshake.py
+
+# 运行测试套件
+python tests/test_sip_protocol.py
 ```
 
 ### Node.js实现
@@ -73,8 +76,11 @@ cd sip-protocol/javascript
 # 安装依赖
 npm install
 
-# 运行示例
-node examples/basic-handshake.js
+# 运行示例（完整握手流程）
+npm run example:handshake
+
+# 运行测试套件
+npm test
 ```
 
 ## 性能
@@ -98,6 +104,60 @@ node examples/basic-handshake.js
 ## 常见问题
 
 参见 [FAQ](docs/e2ee-protocol.md#常见问题解答faq)。
+
+## 测试
+
+### 测试套件
+
+**Python测试：**
+- 测试文件：`tests/test_sip_protocol.py`
+- 测试用例：6个
+  1. 基本握手流程
+  2. 消息加密解密
+  3. Nonce管理（防重放）
+  4. 时间戳验证（防重放）
+  5. 防重放标签（replay_tag）
+  6. 群组加密
+
+**Node.js测试：**
+- 测试文件：`javascript/tests/test_sip_protocol.js`
+- 测试用例：6个
+  1. 基本握手流程
+  2. 消息加密解密
+  3. Nonce管理（防重放）
+  4. 防重放标签（replay_tag）
+  5. 群组加密
+  6. 跳跃密钥（Skip Ratchet）
+
+### 运行测试
+
+```bash
+# Python测试
+cd sip-protocol/python
+python tests/test_sip_protocol.py
+
+# Node.js测试
+cd sip-protocol/javascript
+npm test
+```
+
+## 示例
+
+### Python示例
+
+- 文件：`examples/basic_handshake.py`
+- 功能：完整的端到端握手流程
+- Agent A和Agent B建立加密通道
+- 三重DH密钥交换
+- PSK哈希和密钥派生
+
+### Node.js示例
+
+- 文件：`javascript/examples/basic_handshake.js`
+- 功能：完整的端到端握手流程
+- Agent A和Agent B建立加密通道
+- 三重DH密钥交换
+- PSK哈希和密钥派生
 
 ## 贡献
 
