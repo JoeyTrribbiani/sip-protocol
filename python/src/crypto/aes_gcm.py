@@ -21,9 +21,10 @@ def encrypt_aes_gcm(key: bytes, plaintext: bytes, iv: bytes) -> tuple[bytes, byt
         Tuple[bytes, bytes]: (密文, 认证标签)
     """
     aesgcm = AESGCM(key)
-    ciphertext = aesgcm.encrypt(iv, plaintext, None)
-    ciphertext = ciphertext[: len(plaintext)]
-    auth_tag = ciphertext[len(plaintext) :]
+    ciphertext_with_tag = aesgcm.encrypt(iv, plaintext, None)
+    # AES-GCM auth_tag是固定的16字节，从最后16字节分离
+    auth_tag = ciphertext_with_tag[-16:]
+    ciphertext = ciphertext_with_tag[:-16]
     return ciphertext, auth_tag
 
 

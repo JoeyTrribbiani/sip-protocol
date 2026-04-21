@@ -193,7 +193,7 @@ def test_group_encryption():
     plaintext = "Hello, Group SIP!"
     group_manager = GroupManager(group_state["group_id"], group_state["root_key"])
     message, updated_state = group_manager.send_group_message(
-        plaintext, group_state["members"]["agent-a"]["sending_chain"]
+        plaintext, group_state["members"]["agent-a"]["sending_chain"], "agent-a"
     )
 
     print(f"✅ 群组消息已发送：{message[:50]}...")
