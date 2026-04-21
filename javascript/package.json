@@ -2,9 +2,10 @@
   "name": "sip-protocol",
   "version": "1.0.0",
   "description": "Swarm Intelligence Protocol (SIP) - 基于Signal Double Ratchet的多Agent端到端加密通信协议",
-  "main": "sip_protocol.js",
+  "main": "sip_protocol_complete.js",
   "scripts": {
-    "test": "node tests/test.js",
+    "test": "node tests/test_sip_protocol.js",
+    "example:handshake": "node examples/basic_handshake.js",
     "lint": "eslint ."
   },
   "keywords": [
