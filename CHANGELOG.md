@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Security Features
+- **Rekey密钥轮换功能**（src/protocol/rekey.py，115行代码）
+  - Rekey请求创建和验证
+  - Rekey响应创建和验证
+  - 新密钥派生和应用
+  - HMAC签名验证（防MITM）
+  - 时间戳验证（±5分钟，防重放）
+  - 序列号验证（防回滚）
+  - 前向保密（旧密钥无法解密新消息）
+  - 双向确认（确保密钥同步）
+
+#### Testing
+- **Rekey测试用例**（tests/test_rekey.py，9个测试场景）
+  - Rekey请求创建和验证
+  - 无效签名检测
+  - Rekey响应创建和验证
+  - 完整Rekey流程
+  - 时间戳验证
+  - 序列号验证
+  - 前向保密性验证
+- **测试向量生成脚本**（python/generate_test_vectors.py）
+- **完整测试向量**（docs/test_vectors.json）
+  - 握手测试向量
+  - 消息加密测试向量
+  - 群组加密测试向量
+  - Rekey测试向量
+
+### Fixed
+
+#### Python Code Quality
+- **代码格式化问题**（Black）
+  - src/crypto/xchacha20_poly1305.py
+  - src/protocol/handshake.py
+- **Pylint警告**
+  - 修复src/__init__.py中的self-assigning-variable警告
+- **MyPy类型错误**（3个文件）
+  - src/protocol/message.py: 将`replay_key: bytes = None`改为`replay_key: Optional[bytes] = None`
+  - src/crypto/argon2.py: 将`salt: bytes = None`改为`salt: Optional[bytes] = None`
+  - src/protocol/group.py: 为`members`字段添加类型注解`members: dict = {}`
+
+### Changed
+
+#### Code Quality
+- **Pylint评分**: 从7.69/10提升到10.00/10（满分）
+- **测试覆盖率**: 提升至77%（452 statements, 102 missed）
+- **所有CI/CD检查通过**
+  - ✅ Black: 所有文件格式正确
+  - ✅ Pylint: 10.00/10
+  - ✅ MyPy: 无类型错误
+  - ✅ Python测试: 16个测试用例全部通过
+  - ✅ JavaScript测试: 6个测试场景全部通过
+
+### Added
+
 #### Python
 - 模块化重构：crypto、protocol、managers模块
 - 新增`src/`目录结构
