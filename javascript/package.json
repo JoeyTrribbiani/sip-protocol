@@ -1,0 +1,33 @@
+{
+  "name": "sip-protocol",
+  "version": "1.0.0",
+  "description": "Swarm Intelligence Protocol (SIP) - 基于Signal Double Ratchet的多Agent端到端加密通信协议",
+  "main": "sip_protocol.js",
+  "scripts": {
+    "test": "node tests/test.js",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "e2ee",
+    "end-to-end-encryption",
+    "signal-protocol",
+    "double-ratchet",
+    "multi-agent",
+    "swarm-intelligence",
+    "cryptography",
+    "secure-communication"
+  ],
+  "author": "Joey Tribbiani",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "argon2": "^0.31.0",
+    "@stablelib/x25519": "^1.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoeyTrribbiani/sip-protocol"
+  }
+}
