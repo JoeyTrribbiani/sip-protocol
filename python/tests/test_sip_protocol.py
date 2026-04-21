@@ -2,7 +2,7 @@
 """SIP协议测试脚本"""
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from sip_protocol import *
 
