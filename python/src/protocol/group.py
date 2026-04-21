@@ -8,8 +8,8 @@ import hmac
 import hashlib
 import time
 import json
-from .crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm, AES_GCM_NONCE_LENGTH
-from .crypto.hkdf import hkdf
+from ..crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm, AES_GCM_NONCE_LENGTH
+from ..crypto.hkdf import hkdf
 
 GROUP_PROTOCOL_VERSION = "SIP-1.0"
 MESSAGE_KEY_LENGTH = 32

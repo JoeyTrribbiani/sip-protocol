@@ -8,9 +8,9 @@ import os
 import time
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization
-from .crypto.dh import generate_keypair, dh_exchange
-from .crypto.argon2 import hash_psk
-from .crypto.hkdf import derive_keys
+from ..crypto.dh import generate_keypair, dh_exchange
+from ..crypto.argon2 import hash_psk
+from ..crypto.hkdf import derive_keys
 
 HANDSHAKE_NONCE_LENGTH = 16
 PROTOCOL_VERSION = "SIP-1.0"

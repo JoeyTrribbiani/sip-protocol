@@ -37,7 +37,6 @@ __all__ = [
     # 常量
     'KDF_SALT',
     'KDF_INFO',
-    'NONCE_LENGTH',
     'HANDSHAKE_NONCE_LENGTH',
     'MESSAGE_KEY_LENGTH',
     'CHAIN_KEY_LENGTH',

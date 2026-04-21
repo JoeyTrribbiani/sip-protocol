@@ -2,9 +2,12 @@
 """SIP协议测试脚本"""
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+import time
+import base64
+from cryptography.hazmat.primitives import serialization
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from sip_protocol import *
+from src import *
 
 def test_basic_handshake():
     """测试基本握手流程"""
@@ -14,8 +17,8 @@ def test_basic_handshake():
     priv_a, pub_a = generate_keypair()
     priv_b, pub_b = generate_keypair()
     
-    print(f"✅ Agent A公钥：{pub_a.public_bytes().hex()[:32]}...")
-    print(f"✅ Agent B公钥：{pub_b.public_bytes().hex()[:32]}...")
+    print(f"✅ Agent A公钥：{pub_a.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw).hex()[:32]}...")
+    print(f"✅ Agent B公钥：{pub_b.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw).hex()[:32]}...")
     
     # DH密钥交换
     shared_a = dh_exchange(priv_a, pub_b)
@@ -55,7 +58,9 @@ def test_message_encryption():
     plaintext = "Hello, Agent B! This is a secure message."
     
     # 加密消息
-    nonce, ciphertext = encrypt_message(encryption_key, plaintext, "agent-a", 1)
+    encrypted_msg = encrypt_message(encryption_key, plaintext, "agent-a", 1)
+    nonce = base64.b64decode(encrypted_msg['nonce'])
+    ciphertext = base64.b64decode(encrypted_msg['ciphertext'])
     
     print(f"✅ 消息已加密：{len(ciphertext)} bytes")
     print(f"✅ Nonce：{nonce.hex()[:16]}...")
@@ -141,15 +146,15 @@ def test_group_encryption():
         "root_key": bytes.fromhex("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"),
         "members": {
             "agent-a": {
-                "sending_chain": {"chain_key": bytes.fromhex("111111111111111111111111111111111111111111"), "message_number": 0},
+                "sending_chain": {"chain_key": bytes.fromhex("1111111111111111111111111111111111111111111111111111111111111111"), "message_number": 0},
                 "receiving_chains": {}
             },
             "agent-b": {
-                "sending_chain": {"chain_key": bytes.fromhex("222222222222222222222222222222222222222222222"), "message_number": 0},
+                "sending_chain": {"chain_key": bytes.fromhex("222222222222222222222222222222222222222222222222222222222222222222"), "message_number": 0},
                 "receiving_chains": {}
             },
             "agent-c": {
-                "sending_chain": {"chain_key": bytes.fromhex("333333333333333333333333333333333333333333333"), "message_number": 0},
+                "sending_chain": {"chain_key": bytes.fromhex("333333333333333333333333333333333333333333333333333333333333333333"), "message_number": 0},
                 "receiving_chains": {}
             }
         }
@@ -157,7 +162,8 @@ def test_group_encryption():
     
     # 发送群组消息
     plaintext = "Hello, Group SIP!"
-    message, updated_state = send_group_message(plaintext, group_state["members"]["agent-a"]["sending_chain"], "agent-a")
+    group_manager = GroupManager(group_state["group_id"], group_state["root_key"])
+    message, updated_state = group_manager.send_group_message(plaintext, group_state["members"]["agent-a"]["sending_chain"])
     
     print(f"✅ 群组消息已发送：{message[:50]}...")
     print("✅ 测试6通过！\n")

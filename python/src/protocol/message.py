@@ -7,7 +7,7 @@ import base64
 import hmac
 import hashlib
 import time
-from .crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm, AES_GCM_NONCE_LENGTH
+from ..crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm, AES_GCM_NONCE_LENGTH
 
 PROTOCOL_VERSION = "SIP-1.0"
 
