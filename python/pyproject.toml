@@ -1,0 +1,105 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sip-protocol"
+version = "1.0.0"
+description = "Swarm Intelligence Protocol (SIP) - 基于Signal Double Ratchet的多Agent端到端加密通信协议"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Joey Tribbiani"}
+]
+keywords = [
+    "e2ee",
+    "end-to-end-encryption",
+    "signal-protocol",
+    "double-ratchet",
+    "multi-agent",
+    "swarm-intelligence",
+    "cryptography",
+    "secure-communication"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+
+dependencies = [
+    "cryptography>=41.0.0",
+    "argon2-cffi>=23.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "pylint>=3.0.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/JoeyTrribbiani/sip-protocol"
+Repository = "https://github.com/JoeyTrribbiani/sip-protocol"
+Documentation = "https://github.com/JoeyTrribbiani/sip-protocol/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.pylint.main]
+py-version = "3.11"
+ignore = ["tests/"]
+max-line-length = 100
+disable = [
+    "C0111",  # missing-docstring
+    "C0103",  # invalid-name
+    "C0301",  # line-too-long
+    "R0903",  # too-few-public-methods
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]

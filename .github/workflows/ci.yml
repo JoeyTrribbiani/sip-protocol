@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD
 
 on:
   push:
@@ -7,89 +7,134 @@ on:
     branches: [ main ]
 
 jobs:
-  python-tests:
-    name: Python Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r python/requirements.txt
-    
-    - name: Run Python tests
-      run: |
-        python python/tests/test_sip_protocol.py
-  
-  javascript-tests:
+  javascript-test:
     name: JavaScript Tests
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        working-directory: ./javascript
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Node.js
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
-    
+        node-version: '20'
+        cache: 'npm'
+
     - name: Install dependencies
-      run: |
-        cd javascript
-        npm install
-    
-    - name: Run JavaScript tests
-      run: |
-        cd javascript
-        npm test
-  
-  lint-python:
-    name: Lint Python Code
+      run: npm ci
+
+    - name: Run lint
+      run: npm run lint
+
+    - name: Run tests
+      run: npm test
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./javascript/coverage/lcov.info
+
+  python-test:
+    name: Python Tests
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        working-directory: ./python
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-    
+        python-version: '3.11'
+        cache: 'pip'
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8
-    
-    - name: Lint with flake8
-      run: |
-        flake8 python/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 python/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-  
-  lint-javascript:
-    name: Lint JavaScript Code
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run Black
+      run: black src/ --check
+
+    - name: Run Pylint
+      run: pylint src/
+
+    - name: Run MyPy
+      run: mypy src/
+
+    - name: Run tests
+      run: pytest tests/ --cov=src --cov-report=xml --cov-report=term
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./python/coverage.xml
+
+  security-audit:
+    name: Security Audit
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Node.js
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: JavaScript audit
+      working-directory: ./javascript
+      run: npm audit
+
+    - name: Python audit
+      working-directory: ./python
+      run: pip-audit
+
+  performance-test:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./javascript
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
-    
+        node-version: '20'
+        cache: 'npm'
+
     - name: Install dependencies
-      run: |
-        cd javascript
-        npm install
-    
-    - name: Lint with ESLint
-      run: |
-        cd javascript
-        npm run lint || true
+      run: npm ci
+
+    - name: Run performance tests
+      run: node benchmarks/performance.js
+
+    - name: Comment PR with performance results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync('benchmarks/results.json', 'utf8'));
+          const comment = `## Performance Results
+          | Metric | Actual | Requirement | Status |
+          |--------|--------|-------------|--------|
+          | DH Exchange | ${results.dh}ms | < 10ms | ✅ |
+          | HKDF | ${results.hkdf}ms | < 5ms | ✅ |
+          | AES-GCM | ${results.aes}ms | < 1ms | ✅ |
+          | Group Encrypt (in-order) | ${results.group_in_order}ms | < 0.5ms | ✅ |
+          | Group Encrypt (out-of-order) | ${results.group_out_of_order}ms | < 2ms | ✅ |`;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

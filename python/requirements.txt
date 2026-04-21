@@ -1,2 +1,5 @@
+# SIP协议Python实现依赖
+
+# 核心依赖
 cryptography>=41.0.0
 argon2-cffi>=23.0.0
