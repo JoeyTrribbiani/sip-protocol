@@ -78,11 +78,17 @@ extend-exclude = '''
 py-version = "3.11"
 ignore = ["tests/"]
 max-line-length = 100
+max-args = 7
+max-locals = 30
+max-attributes = 15
 disable = [
     "C0111",  # missing-docstring
     "C0103",  # invalid-name
     "C0301",  # line-too-long
     "R0903",  # too-few-public-methods
+    "W0201",  # attribute-defined-outside-init
+    "R0801",  # duplicate-code
+    "R0917",  # too-many-positional-arguments
 ]
 
 [tool.mypy]
