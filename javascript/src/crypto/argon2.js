@@ -6,6 +6,13 @@
 const argon2 = require('argon2');
 const crypto = require('crypto');
 
+// Argon2id 常量
+const ARGON2_SALT_LENGTH = 16;
+const ARGON2_MEMORY_COST = 65536;  // 64MB
+const ARGON2_TIME_COST = 3;
+const ARGON2_PARALLELISM = 4;
+const ARGON2_HASH_LENGTH = 32;
+
 /**
  * 哈希PSK（Argon2id）
  * @param {Buffer|String} psk - 预共享密钥
@@ -14,15 +21,15 @@ const crypto = require('crypto');
  */
 async function hashPsk(psk, salt = null) {
   if (!salt) {
-    salt = crypto.randomBytes(16);
+    salt = crypto.randomBytes(ARGON2_SALT_LENGTH);
   }
   
   const options = {
     type: argon2.argon2id,
-    memoryCost: 65536,     // 64MB
-    timeCost: 3,
-    parallelism: 4,
-    hashLength: 32,
+    memoryCost: ARGON2_MEMORY_COST,
+    timeCost: ARGON2_TIME_COST,
+    parallelism: ARGON2_PARALLELISM,
+    hashLength: ARGON2_HASH_LENGTH,
     salt: salt,
     raw: true
   };

@@ -135,10 +135,9 @@ class GroupManager {
   /**
    * 接收群组消息（完整版，支持乱序消息）
    * @param {Object} message - 群组消息
-   * @param {String} recipientId - 接收方ID
    * @returns {String} 明文消息
    */
-  receiveGroupMessage(message, recipientId) {
+  receiveGroupMessage(message) {
     // 1. 解析消息
     const senderId = message.sender_id;
     const messageNumber = message.message_number;

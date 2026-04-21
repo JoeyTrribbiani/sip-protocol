@@ -18,8 +18,12 @@ module.exports = {
     'semi': ['error', 'always'],
     'no-unused-vars': ['warn'],
     'no-console': 'off',
-    'camelcase': 'warn',
-    'no-magic-numbers': 'warn',
+    'camelcase': 'off',  // 允许snake_case以保持与Python API一致
+    'no-magic-numbers': ['warn', {
+      ignore: [0, 1],  // 忽略0和1（数组起始索引和自增操作）
+      ignoreArrayIndexes: true,  // 忽略数组索引
+      ignoreDefaultValues: true  // 忽略默认值
+    }],
     'max-len': ['warn', { code: 100 }]
   },
   ignorePatterns: [

@@ -5,6 +5,12 @@
 
 const crypto = require('crypto');
 
+// HKDF 常量
+const KDF_TOTAL_LENGTH = 96;  // 3 × 32 bytes
+const KDF_KEY_LENGTH = 32;   // 单个密钥长度（字节）
+const KDF_AUTH_KEY_OFFSET = 32;
+const KDF_REPLAY_KEY_OFFSET = 64;
+
 /**
  * HKDF密钥派生
  * @param {Buffer} ikm - 输入密钥材料
@@ -32,12 +38,12 @@ function deriveKeys(sharedSecret, pskHash, nonceA, nonceB) {
   const KDF_INFO = Buffer.from('session-keys');
   
   const ikm = Buffer.concat([sharedSecret, pskHash, nonceA, nonceB]);
-  const kdf = hkdf(ikm, KDF_SALT, KDF_INFO, 96);
+  const kdf = hkdf(ikm, KDF_SALT, KDF_INFO, KDF_TOTAL_LENGTH);
   
   return {
-    encryptionKey: kdf.slice(0, 32),
-    authKey: kdf.slice(32, 64),
-    replayKey: kdf.slice(64, 96)
+    encryptionKey: kdf.slice(0, KDF_KEY_LENGTH),
+    authKey: kdf.slice(KDF_AUTH_KEY_OFFSET, KDF_REPLAY_KEY_OFFSET),
+    replayKey: kdf.slice(KDF_REPLAY_KEY_OFFSET, KDF_TOTAL_LENGTH)
   };
 }
 
