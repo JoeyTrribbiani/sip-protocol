@@ -33,9 +33,32 @@ def hkdf(ikm: bytes, salt: bytes, info: bytes, length: int) -> bytes:
     return kdf.derive(ikm)
 
 
+def derive_keys_triple_dh(shared_1, shared_2, shared_3, psk_hash, nonce_a, nonce_b):
+    """
+    派生三个独立密钥（用于握手，三重DH）
+
+    Args:
+        shared_1: DH共享密钥1 (identity_local × remote_ephemeral)
+        shared_2: DH共享密钥2 (ephemeral_local × remote_identity)
+        shared_3: DH共享密钥3 (ephemeral_local × remote_ephemeral)
+        psk_hash: PSK哈希
+        nonce_a: 发起方Nonce
+        nonce_b: 响应方Nonce
+
+    Returns:
+        Tuple[bytes, bytes, bytes]: (encryption_key, auth_key, replay_key)
+    """
+    ikm = shared_1 + shared_2 + shared_3 + psk_hash + nonce_a + nonce_b
+    kdf = hkdf(ikm, KDF_SALT, KDF_INFO, 96)
+    encryption_key = kdf[:32]
+    auth_key = kdf[32:64]
+    replay_key = kdf[64:96]
+    return encryption_key, auth_key, replay_key
+
+
 def derive_keys(shared_secret, psk_hash, nonce_a, nonce_b):
     """
-    派生三个独立密钥（用于握手）
+    派生三个独立密钥（用于握手，单次DH - 保留兼容性）
 
     Args:
         shared_secret: DH共享密钥

@@ -1,64 +1,81 @@
 /**
  * 消息加密模块
- * 实现消息加密和解密
+ * 实现消息加密和解密（XChaCha20-Poly1305）
  */
 
-const { encryptAESGCM, decryptAESGCM } = require('../crypto/aes-gcm');
+const {
+  encryptXChaCha20Poly1305,
+  decryptXChaCha20Poly1305,
+  generateNonce
+} = require('../crypto/xchacha20-poly1305');
 const crypto = require('crypto');
 
 const PROTOCOL_VERSION = 'SIP-1.0';
-const AES_GCM_NONCE_LENGTH = 12;
 
 /**
- * 加密消息
+ * 加密消息（XChaCha20-Poly1305）
  * @param {Buffer} encryptionKey - 加密密钥
  * @param {String} plaintext - 明文消息
  * @param {String} senderId - 发送方ID
+ * @param {String} recipientId - 接收方ID
  * @param {Number} messageCounter - 消息计数器
+ * @param {Buffer} replayKey - 防重放密钥（可选，用于生成replay_tag）
  * @returns {Object} 加密后的消息
  */
-function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
-  const iv = crypto.randomBytes(AES_GCM_NONCE_LENGTH);
-  const { ciphertext, authTag } = encryptAESGCM(
+function encryptMessage(encryptionKey, plaintext, senderId, recipientId, messageCounter, replayKey = null) {
+  const iv = generateNonce();
+  const { ciphertext, authTag } = encryptXChaCha20Poly1305(
     encryptionKey,
     Buffer.from(plaintext),
     iv
   );
-  
+
+  // 生成replay_tag（如果提供了replay_key）
+  let replayTag = null;
+  if (replayKey !== null) {
+    replayTag = generateReplayTag(replayKey, senderId, messageCounter);
+  }
+
   const message = {
     version: PROTOCOL_VERSION,
-    type: 'encrypted_message',
+    type: 'message',  // 修改为文档要求的类型
+    timestamp: Date.now(),
     sender_id: senderId,
+    recipient_id: recipientId,  // 添加recipient_id字段
     message_counter: messageCounter,
-    nonce: iv.toString('base64'),
-    ciphertext: ciphertext.toString('base64'),
-    auth_tag: authTag.toString('base64'),
-    timestamp: Date.now()
+    iv: iv.toString('base64'),
+    payload: ciphertext.toString('base64'),  // 修改为payload（符合文档）
+    auth_tag: authTag.toString('base64')
   };
-  
+
+  // 添加replay_tag字段（如果生成了）
+  if (replayTag !== null) {
+    message.replay_tag = replayTag;
+  }
+
   return message;
 }
 
 /**
- * 解密消息
+ * 解密消息（XChaCha20-Poly1305）
  * @param {Buffer} encryptionKey - 解密密钥
  * @param {Object} message - 加密的消息
  * @returns {String} 明文消息
  * @throws {Error} 解密失败时抛出异常
  */
 function decryptMessage(encryptionKey, message) {
-  const iv = Buffer.from(message.nonce, 'base64');
-  const ciphertext = Buffer.from(message.ciphertext, 'base64');
+  const iv = Buffer.from(message.iv, 'base64');
+  const ciphertext = Buffer.from(message.payload, 'base64');  // 修改为payload（符合文档）
   const authTag = Buffer.from(message.auth_tag, 'base64');
-  
+
   try {
-    const plaintext = decryptAESGCM(
+    const plaintext = decryptXChaCha20Poly1305(
       encryptionKey,
       ciphertext,
       iv,
       authTag
     );
-    
+
     return plaintext.toString('utf8');
   } catch (error) {
     throw new Error('解密失败：' + error.message);
@@ -77,11 +94,11 @@ function generateReplayTag(replayKey, senderId, messageCounter) {
     Buffer.from(senderId),
     Buffer.from(messageCounter.toString())
   ]);
-  
+
   const replayTag = crypto.createHmac('sha256', replayKey)
     .update(data)
     .digest('hex');
-  
+
   return replayTag;
 }
 
@@ -103,7 +120,6 @@ function verifyReplayTag(replayKey, senderId, messageCounter, replayTag) {
 
 module.exports = {
   PROTOCOL_VERSION,
-  AES_GCM_NONCE_LENGTH,
   encryptMessage,
   decryptMessage,
   generateReplayTag,

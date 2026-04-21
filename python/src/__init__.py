@@ -1,51 +1,56 @@
 """
-SIP协议完整实现
-统一导出所有模块
+SIP协议主模块
+导出所有公共API
 """
 
-# 常量
-from .crypto.hkdf import KDF_SALT, KDF_INFO
-from .crypto.aes_gcm import AES_GCM_NONCE_LENGTH
-from .protocol.handshake import HANDSHAKE_NONCE_LENGTH
-from .protocol.group import MESSAGE_KEY_LENGTH, CHAIN_KEY_LENGTH
+# 密码学模块
+from src.crypto.dh import generate_keypair, dh_exchange
+from src.crypto.argon2 import hash_psk
+from src.crypto.hkdf import hkdf, derive_keys, derive_keys_triple_dh
+from src.crypto.xchacha20_poly1305 import (
+    encrypt_xchacha20_poly1305,
+    decrypt_xchacha20_poly1305,
+    generate_nonce as generate_crypto_nonce,
+    NONCE_LENGTH,
+)
 
-# Crypto模块
-from .crypto.dh import generate_keypair, dh_exchange
-from .crypto.hkdf import hkdf, derive_keys
-from .crypto.argon2 import hash_psk
-from .crypto.aes_gcm import encrypt_aes_gcm, decrypt_aes_gcm
-
-# Protocol模块
-from .protocol.handshake import initiate_handshake, respond_handshake, complete_handshake
-from .protocol.message import (
+# 协议模块
+from src.protocol.handshake import (
+    initiate_handshake,
+    respond_handshake,
+    complete_handshake,
+    HANDSHAKE_NONCE_LENGTH,
+    PROTOCOL_VERSION,
+)
+from src.protocol.message import (
     encrypt_message,
     decrypt_message,
     generate_replay_tag,
     verify_replay_tag,
 )
-from .protocol.group import GroupManager
 
-# Managers模块
-from .managers.nonce import NonceManager
-from .managers.session import SessionState
+# 管理器模块
+from src.managers.session import SessionState
+from src.managers.group import GroupManager
+from src.managers.nonce import NonceManager
+
+# 常量
+NONCE_LENGTH = NONCE_LENGTH
+HANDSHAKE_NONCE_LENGTH = HANDSHAKE_NONCE_LENGTH
+PROTOCOL_VERSION = PROTOCOL_VERSION
 
 __all__ = [
-    # 常量
-    "KDF_SALT",
-    "KDF_INFO",
-    "HANDSHAKE_NONCE_LENGTH",
-    "MESSAGE_KEY_LENGTH",
-    "CHAIN_KEY_LENGTH",
-    "AES_GCM_NONCE_LENGTH",
-    # Crypto模块
+    # 密码学
     "generate_keypair",
     "dh_exchange",
+    "hash_psk",
     "hkdf",
     "derive_keys",
-    "hash_psk",
-    "encrypt_aes_gcm",
-    "decrypt_aes_gcm",
-    # Protocol模块
+    "derive_keys_triple_dh",
+    "encrypt_xchacha20_poly1305",
+    "decrypt_xchacha20_poly1305",
+    "generate_crypto_nonce",
+    # 协议
     "initiate_handshake",
     "respond_handshake",
     "complete_handshake",
@@ -53,8 +58,12 @@ __all__ = [
     "decrypt_message",
     "generate_replay_tag",
     "verify_replay_tag",
-    # Managers模块
-    "NonceManager",
+    # 管理器
     "SessionState",
     "GroupManager",
+    "NonceManager",
+    # 常量
+    "NONCE_LENGTH",
+    "HANDSHAKE_NONCE_LENGTH",
+    "PROTOCOL_VERSION",
 ]

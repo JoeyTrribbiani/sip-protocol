@@ -43,9 +43,10 @@ def test_basic_handshake():
     nonce_a = os.urandom(HANDSHAKE_NONCE_LENGTH)
     nonce_b = os.urandom(HANDSHAKE_NONCE_LENGTH)
 
-    # 派生密钥
+    # 派生密钥（使用单次DH的derive_keys以保持兼容性）
+    # 注意：双方必须使用相同的nonce顺序（nonce_a在前，nonce_b在后）
     enc_key_a, auth_key_a, replay_key_a = derive_keys(shared_a, psk_hash_a, nonce_a, nonce_b)
-    enc_key_b, auth_key_b, replay_key_b = derive_keys(shared_b, psk_hash_b, nonce_b, nonce_a)
+    enc_key_b, auth_key_b, replay_key_b = derive_keys(shared_b, psk_hash_b, nonce_a, nonce_b)
 
     print(f"✅ 加密密钥一致：{enc_key_a == enc_key_b}")
     print(f"✅ 认证密钥一致：{auth_key_a == auth_key_b}")
@@ -64,10 +65,12 @@ def test_message_encryption():
     # 明文消息
     plaintext = "Hello, Agent B! This is a secure message."
 
-    # 加密消息
-    encrypted_msg = encrypt_message(encryption_key, plaintext, "agent-a", 1)
-    nonce = base64.b64decode(encrypted_msg["nonce"])
-    ciphertext = base64.b64decode(encrypted_msg["ciphertext"])
+    # 加密消息（需要sender_id, recipient_id, message_counter）
+    encrypted_msg = encrypt_message(
+        encryption_key, plaintext, "agent-a", "agent-b", 1
+    )
+    nonce = base64.b64decode(encrypted_msg["iv"])
+    ciphertext = base64.b64decode(encrypted_msg["payload"])
 
     print(f"✅ 消息已加密：{len(ciphertext)} bytes")
     print(f"✅ Nonce：{nonce.hex()[:16]}...")

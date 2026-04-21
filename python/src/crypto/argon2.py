@@ -6,6 +6,9 @@ PSK哈希模块
 from argon2 import PasswordHasher, low_level
 import os
 
+# 固定盐（用于测试）
+FIXED_SALT = b"SIPProtocolTestSalt"  # 16字节
+
 
 def hash_psk(psk: bytes, salt: bytes = None) -> tuple[bytes, bytes]:
     """
@@ -13,16 +16,16 @@ def hash_psk(psk: bytes, salt: bytes = None) -> tuple[bytes, bytes]:
 
     Args:
         psk: 预共享密钥（任意长度）
-        salt: 盐（可选，如果为None则生成随机盐，16字节）
+        salt: 盐（可选，如果为None则使用固定盐）
 
     Returns:
         Tuple[bytes, bytes]: (psk_hash, salt)
 
     需要安装: pip install argon2-cffi
     """
-    # 如果没有提供盐，生成随机盐
+    # 如果没有提供盐，使用固定盐
     if salt is None:
-        salt = os.urandom(16)
+        salt = FIXED_SALT
 
     # 使用低级API直接计算哈希（避免格式化）
     psk_hash = low_level.hash_secret_raw(

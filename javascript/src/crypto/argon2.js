@@ -13,15 +13,18 @@ const ARGON2_TIME_COST = 3;
 const ARGON2_PARALLELISM = 4;
 const ARGON2_HASH_LENGTH = 32;
 
+// 固定盐（用于测试）
+const FIXED_SALT = Buffer.from('SIPProtocolTestSalt');  // 16字节
+
 /**
  * 哈希PSK（Argon2id）
  * @param {Buffer|String} psk - 预共享密钥
- * @param {Buffer|null} salt - 盐（如果为null则生成随机盐）
+ * @param {Buffer|null} salt - 盐（如果为null则使用固定盐）
  * @returns {Promise<Object>} { pskHash, salt }
  */
 async function hashPsk(psk, salt = null) {
   if (!salt) {
-    salt = crypto.randomBytes(ARGON2_SALT_LENGTH);
+    salt = FIXED_SALT;
   }
   
   const options = {

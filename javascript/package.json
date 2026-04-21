@@ -29,7 +29,8 @@
   "author": "Joey Tribbiani",
   "license": "Apache-2.0",
   "dependencies": {
-    "argon2": "^0.31.0"
+    "@noble/ciphers": "^0.5.0",
+    "argon2": "^0.44.0"
   },
   "devDependencies": {
     "eslint": "^8.0.0",

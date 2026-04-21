@@ -16,9 +16,14 @@ const AES_GCM_NONCE_LENGTH = 12;
 
 // Crypto模块
 const { generateKeyPair, dhExchange } = require('./crypto/dh');
-const { hkdf, deriveKeys } = require('./crypto/hkdf');
+const { hkdf, deriveKeys, deriveKeysTripleDH } = require('./crypto/hkdf');
 const { hashPsk } = require('./crypto/argon2');
 const { encryptAESGCM, decryptAESGCM } = require('./crypto/aes-gcm');
+const {
+  encryptXChaCha20Poly1305,
+  decryptXChaCha20Poly1305,
+  generateNonce
+} = require('./crypto/xchacha20-poly1305');
 
 // Protocol模块
 const {
@@ -55,9 +60,13 @@ module.exports = {
   dhExchange,
   hkdf,
   deriveKeys,
+  deriveKeysTripleDH,
   hashPsk,
   encryptAESGCM,
   decryptAESGCM,
+  encryptXChaCha20Poly1305,
+  decryptXChaCha20Poly1305,
+  generateNonce,
 
   // Protocol模块
   initiateHandshake,

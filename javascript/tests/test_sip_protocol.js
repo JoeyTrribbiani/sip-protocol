@@ -73,12 +73,13 @@ function testMessageEncryption() {
   const encryptionKey = crypto.randomBytes(32);
   const plaintext = 'Hello, SIP!';
   const senderId = 'agent-a';
+  const recipientId = 'agent-b';
   const messageCounter = 1;
   
-  // 加密消息
-  const message = encryptMessage(encryptionKey, plaintext, senderId, messageCounter);
-  console.log('✅ 消息已加密：', message.ciphertext.length + ' bytes');
-  console.log('✅ Nonce：', message.nonce.substring(0, 10) + '...');
+  // 加密消息（需要senderId, recipientId, messageCounter）
+  const message = encryptMessage(encryptionKey, plaintext, senderId, recipientId, messageCounter);
+  console.log('✅ 消息已加密：', message.payload.length + ' bytes');
+  console.log('✅ Nonce：', message.iv.substring(0, 10) + '...');
   
   // 解密消息
   const decrypted = decryptMessage(encryptionKey, message);
