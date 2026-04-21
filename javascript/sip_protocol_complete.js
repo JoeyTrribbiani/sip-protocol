@@ -17,9 +17,9 @@ const AES_GCM_NONCE_LENGTH = 12;
 
 // 密钥对生成
 function generateKeyPair() {
-  const privateKey = x25519.getPrivateKey();
-  const publicKey = x25519.getPublicKey(privateKey);
-  return { privateKey, publicKey };
+  // @stablelib/x25519使用x25519.keyPair()生成密钥对
+  const keyPair = x25519.keyPair();
+  return { privateKey: keyPair.secretKey, publicKey: keyPair.publicKey };
 }
 
 // PSK 哈希（Argon2id）
@@ -48,7 +48,8 @@ function hashPsk(psk, salt = null) {
 
 // DH 密钥交换
 function dhExchange(privateKey, publicKey) {
-  const sharedSecret = x25519.getSharedSecret(privateKey, publicKey);
+  // @stablelib/x25519使用scalarMult进行DH密钥交换
+  const sharedSecret = x25519.scalarMult(privateKey, publicKey);
   return sharedSecret;
 }
 
