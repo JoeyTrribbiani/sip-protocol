@@ -1,7 +1,7 @@
-// SIP协议完整实现 - 对齐Python版本
+// SIP协议完整实现 - 按照协议文档
 
 const crypto = require('crypto');
-const x25519 = require('@stablelib/x25519');
+const { x25519 } = require('@noble/ciphers');
 const argon2 = require('argon2');
 
 // 常量
@@ -15,11 +15,11 @@ const CHAIN_KEY_LENGTH = 32;
 const GROUP_PROTOCOL_VERSION = 'SIP-1.0';
 const AES_GCM_NONCE_LENGTH = 12;
 
-// 密钥对生成
+// 密钥对生成（按照协议文档）
 function generateKeyPair() {
-  // @stablelib/x25519使用x25519.keyPair()生成密钥对
-  const keyPair = x25519.keyPair();
-  return { privateKey: keyPair.secretKey, publicKey: keyPair.publicKey };
+  const privateKey = crypto.randomBytes(32);
+  const publicKey = x25519.getPublicKey(privateKey);
+  return { privateKey, publicKey };
 }
 
 // PSK 哈希（Argon2id）
@@ -46,10 +46,9 @@ function hashPsk(psk, salt = null) {
   return { pskHash, salt };
 }
 
-// DH 密钥交换
+// DH 密钥交换（按照协议文档）
 function dhExchange(privateKey, publicKey) {
-  // @stablelib/x25519使用scalarMult进行DH密钥交换
-  const sharedSecret = x25519.scalarMult(privateKey, publicKey);
+  const sharedSecret = x25519.getSharedSecret(privateKey, publicKey);
   return sharedSecret;
 }
 
@@ -71,10 +70,9 @@ function deriveKeys(sharedSecret, pskHash, nonceA, nonceB) {
 
 // 加密消息（使用XChaCha20-Poly1305）
 function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
-  // 注意：需要 @noble/ciphers 库来实现 XChaCha20-Poly1305
-  // 这里使用简化的AES-GCM作为替代（需要替换为XChaCha20-Poly1305）
-  const iv = crypto.randomBytes(NONCE_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+  // 使用 @noble/ciphers 的 XChaCha20-Poly1305
+  const nonce = Buffer.alloc(NONCE_LENGTH, 0);
+  const cipher = crypto.createCipheriv('chacha20-poly1305', encryptionKey, nonce);
   
   let ciphertext;
   try {
@@ -94,7 +92,7 @@ function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
     type: 'encrypted_message',
     sender_id: senderId,
     message_counter: messageCounter,
-    nonce: iv.toString('base64'),
+    nonce: nonce.toString('base64'),
     ciphertext: ciphertext.toString('base64'),
     auth_tag: authTag.toString('base64'),
     timestamp: Date.now()
@@ -105,11 +103,11 @@ function encryptMessage(encryptionKey, plaintext, senderId, messageCounter) {
 
 // 解密消息
 function decryptMessage(encryptionKey, message) {
-  const iv = Buffer.from(message.nonce, 'base64');
+  const nonce = Buffer.from(message.nonce, 'base64');
   const ciphertext = Buffer.from(message.ciphertext, 'base64');
   const authTag = Buffer.from(message.auth_tag, 'base64');
   
-  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey, iv);
+  const decipher = crypto.createDecipheriv('chacha20-poly1305', encryptionKey, nonce);
   decipher.setAuthTag(authTag);
   
   let plaintext;

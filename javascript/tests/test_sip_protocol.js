@@ -1,6 +1,6 @@
 // SIP协议测试脚本
 const crypto = require('crypto');
-const x25519 = require('@stablelib/x25519');
+const { x25519 } = require('@noble/ciphers');
 const argon2 = require('argon2');
 
 // 导入完整实现
