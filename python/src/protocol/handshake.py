@@ -177,7 +177,7 @@ def respond_handshake(
         "version": PROTOCOL_VERSION,
         "type": "handshake",
         "step": "auth",
-        "timestamp": int(time.time() * 1000),
+        "timestamp": timestamp,  # 复用同一个timestamp变量，确保HMAC验证一致
         "identity_pub": identity_pub_bytes.hex(),  # 身份公钥在顶层
         "auth_data": {
             "ephemeral_pub": ephemeral_pub_bytes.hex(),
