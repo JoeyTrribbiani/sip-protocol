@@ -6,7 +6,6 @@ HKDF密钥派生模块
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 
-
 KDF_SALT = b"SIPHandshake"
 KDF_INFO = b"session-keys"
 

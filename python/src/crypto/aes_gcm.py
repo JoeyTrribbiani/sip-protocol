@@ -5,7 +5,6 @@ AES-GCM加密模块
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-
 AES_GCM_NONCE_LENGTH = 12
 
 
