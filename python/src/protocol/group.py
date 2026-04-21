@@ -31,7 +31,7 @@ class GroupManager:
         """
         self.group_id = group_id
         self.root_key = root_key
-        self.members = {}
+        self.members: dict = {}
 
     def initialize_group_chains(self, members: list, root_key: bytes) -> dict:
         """

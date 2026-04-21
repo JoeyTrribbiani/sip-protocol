@@ -7,6 +7,7 @@ import base64
 import hmac
 import hashlib
 import time
+from typing import Optional
 from ..crypto.xchacha20_poly1305 import (
     encrypt_xchacha20_poly1305,
     decrypt_xchacha20_poly1305,
@@ -23,7 +24,7 @@ def encrypt_message(
     sender_id: str,
     recipient_id: str,
     message_counter: int,
-    replay_key: bytes = None,
+    replay_key: Optional[bytes] = None,
 ) -> dict:
     """
     加密消息（XChaCha20-Poly1305）

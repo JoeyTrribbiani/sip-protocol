@@ -34,10 +34,7 @@ from src.managers.session import SessionState
 from src.managers.group import GroupManager
 from src.managers.nonce import NonceManager
 
-# 常量
-NONCE_LENGTH = NONCE_LENGTH
-HANDSHAKE_NONCE_LENGTH = HANDSHAKE_NONCE_LENGTH
-PROTOCOL_VERSION = PROTOCOL_VERSION
+# 常量（从对应模块导入）
 
 __all__ = [
     # 密码学

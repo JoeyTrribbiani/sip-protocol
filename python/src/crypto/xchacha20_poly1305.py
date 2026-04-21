@@ -34,7 +34,9 @@ def encrypt_xchacha20_poly1305(key: bytes, plaintext: bytes, nonce: bytes) -> tu
     return ciphertext_only, auth_tag
 
 
-def decrypt_xchacha20_poly1305(key: bytes, ciphertext: bytes, nonce: bytes, auth_tag: bytes) -> bytes:
+def decrypt_xchacha20_poly1305(
+    key: bytes, ciphertext: bytes, nonce: bytes, auth_tag: bytes
+) -> bytes:
     """
     ChaCha20-Poly1305解密（Python回退实现）
 

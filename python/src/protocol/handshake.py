@@ -75,7 +75,9 @@ def initiate_handshake(psk: bytes, identity_private_key=None, identity_public_ke
     return handshake_hello, agent_state
 
 
-def respond_handshake(handshake_hello: dict, psk: bytes, identity_private_key=None, identity_public_key=None):
+def respond_handshake(
+    handshake_hello: dict, psk: bytes, identity_private_key=None, identity_public_key=None
+):
     """
     响应握手（三重DH + HMAC签名）
 
@@ -146,7 +148,9 @@ def respond_handshake(handshake_hello: dict, psk: bytes, identity_private_key=No
     # 响应方（B）计算：shared_1 (identity_b × eph_a), shared_2 (eph_b × identity_a), shared_3 (eph_b × eph_a)
     # 由于identity_b × eph_a = eph_a × identity_b，所以shared_1和shared_2在双方是交换的。
     # 响应方需要按照发起方的视角重新排列：shared_1'=shared_2, shared_2'=shared_1, shared_3'=shared_3
-    session_keys = derive_keys_triple_dh(shared_2, shared_1, shared_3, psk_hash, remote_nonce, nonce)
+    session_keys = derive_keys_triple_dh(
+        shared_2, shared_1, shared_3, psk_hash, remote_nonce, nonce
+    )
     encryption_key = session_keys[0]
     auth_key = session_keys[1]
     replay_key = session_keys[2]

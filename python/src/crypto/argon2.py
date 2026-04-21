@@ -3,6 +3,7 @@ PSK哈希模块
 实现基于Argon2id的PSK哈希
 """
 
+from typing import Optional
 from argon2 import PasswordHasher, low_level
 import os
 
@@ -10,7 +11,7 @@ import os
 FIXED_SALT = b"SIPProtocolTestSalt"  # 16字节
 
 
-def hash_psk(psk: bytes, salt: bytes = None) -> tuple[bytes, bytes]:
+def hash_psk(psk: bytes, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
     """
     哈希PSK（Argon2id）
 
