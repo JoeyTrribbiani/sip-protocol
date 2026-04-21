@@ -37,18 +37,13 @@ async def initiate_handshake(psk: bytes):
         "version": PROTOCOL_VERSION,
         "type": "handshake_hello",
         "ephemeral_public_key": public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
+            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
         ).hex(),
-        "nonce": nonce.hex()
+        "nonce": nonce.hex(),
     }
 
     # 保存Agent状态
-    agent_state = {
-        "private_key": private_key,
-        "psk": psk,
-        "nonce": nonce
-    }
+    agent_state = {"private_key": private_key, "psk": psk, "nonce": nonce}
 
     return handshake_hello, agent_state
 
@@ -89,10 +84,9 @@ async def respond_handshake(handshake_hello: dict, psk: bytes):
         "version": PROTOCOL_VERSION,
         "type": "handshake_auth",
         "ephemeral_public_key": public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
+            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
         ).hex(),
-        "nonce": nonce.hex()
+        "nonce": nonce.hex(),
     }
 
     # 保存Agent状态
@@ -100,7 +94,7 @@ async def respond_handshake(handshake_hello: dict, psk: bytes):
         "private_key": private_key,
         "psk": psk,
         "nonce": nonce,
-        "remote_ephemeral_public_key": ephemeral_public_key
+        "remote_ephemeral_public_key": ephemeral_public_key,
     }
 
     return handshake_auth, agent_state, session_keys
@@ -120,9 +114,7 @@ async def complete_handshake(handshake_auth: dict, agent_state: dict):
     from cryptography.hazmat.primitives import serialization
 
     # 解析Handshake_Auth
-    ephemeral_public_key = serialization.Encoding.Raw.load(
-        handshake_auth["ephemeral_public_key"]
-    )
+    ephemeral_public_key = serialization.Encoding.Raw.load(handshake_auth["ephemeral_public_key"])
     remote_nonce = bytes.fromhex(handshake_auth["nonce"])
 
     # DH密钥交换
@@ -133,10 +125,7 @@ async def complete_handshake(handshake_auth: dict, agent_state: dict):
 
     # 派生会话密钥
     encryption_key, auth_key, replay_key = derive_keys(
-        shared_secret,
-        psk_hash,
-        agent_state["nonce"],
-        remote_nonce
+        shared_secret, psk_hash, agent_state["nonce"], remote_nonce
     )
 
     # 构建会话状态
@@ -145,7 +134,11 @@ async def complete_handshake(handshake_auth: dict, agent_state: dict):
         "encryption_key": encryption_key,
         "auth_key": auth_key,
         "replay_key": replay_key,
-        "created_at": time.time()
+        "created_at": time.time(),
     }
 
-    return {"encryption_key": encryption_key, "auth_key": auth_key, "replay_key": replay_key}, session_state
+    return {
+        "encryption_key": encryption_key,
+        "auth_key": auth_key,
+        "replay_key": replay_key,
+    }, session_state

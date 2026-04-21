@@ -32,7 +32,7 @@ def hash_psk(psk: bytes, salt: bytes = None) -> tuple[bytes, bytes]:
         memory_cost=65536,
         parallelism=4,
         hash_len=32,
-        type=low_level.Type.ID
+        type=low_level.Type.ID,
     )
 
     return psk_hash, salt

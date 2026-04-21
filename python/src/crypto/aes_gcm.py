@@ -23,8 +23,8 @@ def encrypt_aes_gcm(key: bytes, plaintext: bytes, iv: bytes) -> tuple[bytes, byt
     """
     aesgcm = AESGCM(key)
     ciphertext = aesgcm.encrypt(iv, plaintext, None)
-    ciphertext = ciphertext[:len(plaintext)]
-    auth_tag = ciphertext[len(plaintext):]
+    ciphertext = ciphertext[: len(plaintext)]
+    auth_tag = ciphertext[len(plaintext) :]
     return ciphertext, auth_tag
 
 

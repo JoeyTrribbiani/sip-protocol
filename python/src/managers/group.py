@@ -5,4 +5,4 @@
 
 from ..protocol.group import GroupManager
 
-__all__ = ['GroupManager']
+__all__ = ["GroupManager"]

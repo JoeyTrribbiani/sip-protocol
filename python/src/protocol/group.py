@@ -49,30 +49,21 @@ class GroupManager:
         for member in members:
             # 派生sending chain key
             sending_chain_key = hkdf(
-                root_key,
-                f"{member}:sending".encode(),
-                b"sending-chain",
-                CHAIN_KEY_LENGTH
+                root_key, f"{member}:sending".encode(), b"sending-chain", CHAIN_KEY_LENGTH
             )
 
             # 派生receiving chain key
             receiving_chain_key = hkdf(
-                root_key,
-                f"{member}:receiving".encode(),
-                b"receiving-chain",
-                CHAIN_KEY_LENGTH
+                root_key, f"{member}:receiving".encode(), b"receiving-chain", CHAIN_KEY_LENGTH
             )
 
             chains[member] = {
-                "sending_chain": {
-                    "chain_key": sending_chain_key,
-                    "message_number": 0
-                },
+                "sending_chain": {"chain_key": sending_chain_key, "message_number": 0},
                 "receiving_chain": {
                     "chain_key": receiving_chain_key,
                     "message_number": 0,
-                    "skip_keys": {}
-                }
+                    "skip_keys": {},
+                },
             }
 
         return chains
@@ -91,40 +82,22 @@ class GroupManager:
         import os
 
         # 1. 派生消息密钥
-        message_key = hkdf(
-            sending_chain["chain_key"],
-            b"",
-            b"message-key",
-            MESSAGE_KEY_LENGTH
-        )
+        message_key = hkdf(sending_chain["chain_key"], b"", b"message-key", MESSAGE_KEY_LENGTH)
 
         # 2. 推进链密钥
-        next_chain_key = hkdf(
-            sending_chain["chain_key"],
-            b"",
-            b"chain-key",
-            CHAIN_KEY_LENGTH
-        )
+        next_chain_key = hkdf(sending_chain["chain_key"], b"", b"chain-key", CHAIN_KEY_LENGTH)
 
         # 3. 加密消息
         iv = os.urandom(AES_GCM_NONCE_LENGTH)
-        ciphertext, auth_tag = encrypt_aes_gcm(
-            message_key,
-            plaintext.encode(),
-            iv
-        )
+        ciphertext, auth_tag = encrypt_aes_gcm(message_key, plaintext.encode(), iv)
 
         # 4. 发送方签名
-        sender_signature = hmac.new(
-            message_key,
-            ciphertext,
-            hashlib.sha256
-        ).digest()
+        sender_signature = hmac.new(message_key, ciphertext, hashlib.sha256).digest()
 
         # 5. 更新sending chain状态
         updated_chain = {
             "chain_key": next_chain_key,
-            "message_number": sending_chain["message_number"] + 1
+            "message_number": sending_chain["message_number"] + 1,
         }
 
         # 6. 构建群组消息
@@ -138,16 +111,12 @@ class GroupManager:
             "iv": base64.b64encode(iv).decode(),
             "ciphertext": base64.b64encode(ciphertext).decode(),
             "auth_tag": base64.b64encode(auth_tag).decode(),
-            "sender_signature": base64.b64encode(sender_signature).decode()
+            "sender_signature": base64.b64encode(sender_signature).decode(),
         }
 
         return json.dumps(message), updated_chain
 
-    def receive_group_message(
-        self,
-        message: str,
-        receiving_chain: dict
-    ) -> tuple[str, dict]:
+    def receive_group_message(self, message: str, receiving_chain: dict) -> tuple[str, dict]:
         """
         接收群组消息（完整版，支持乱序消息）
 
@@ -171,19 +140,13 @@ class GroupManager:
                 if i not in receiving_chain["skip_keys"]:
                     # 为每一条缺失的消息生成跳跃密钥
                     skipped_key = hkdf(
-                        receiving_chain["chain_key"],
-                        b"",
-                        b"message-key",
-                        MESSAGE_KEY_LENGTH
+                        receiving_chain["chain_key"], b"", b"message-key", MESSAGE_KEY_LENGTH
                     )
                     receiving_chain["skip_keys"][i] = skipped_key
 
                     # 推进链密钥
                     next_chain_key = hkdf(
-                        receiving_chain["chain_key"],
-                        b"",
-                        b"chain-key",
-                        CHAIN_KEY_LENGTH
+                        receiving_chain["chain_key"], b"", b"chain-key", CHAIN_KEY_LENGTH
                     )
                     receiving_chain["chain_key"] = next_chain_key
 
@@ -196,44 +159,29 @@ class GroupManager:
         elif message_number == expected_msg_num:
             # 顺序消息，使用当前链密钥
             message_key = hkdf(
-                receiving_chain["chain_key"],
-                b"",
-                b"message-key",
-                MESSAGE_KEY_LENGTH
+                receiving_chain["chain_key"], b"", b"message-key", MESSAGE_KEY_LENGTH
             )
 
             # 推进链密钥
-            next_chain_key = hkdf(
-                receiving_chain["chain_key"],
-                b"",
-                b"chain-key",
-                CHAIN_KEY_LENGTH
-            )
+            next_chain_key = hkdf(receiving_chain["chain_key"], b"", b"chain-key", CHAIN_KEY_LENGTH)
             receiving_chain["chain_key"] = next_chain_key
 
         else:
             # 重复消息或过期消息，拒绝
-            raise ValueError(f"Invalid message number: {message_number}, expected: {expected_msg_num}")
+            raise ValueError(
+                f"Invalid message number: {message_number}, expected: {expected_msg_num}"
+            )
 
         # 3. 解密消息
         iv = base64.b64decode(msg["iv"])
         ciphertext = base64.b64decode(msg["ciphertext"])
         auth_tag = base64.b64decode(msg["auth_tag"])
 
-        plaintext = decrypt_aes_gcm(
-            message_key,
-            ciphertext,
-            iv,
-            auth_tag
-        )
+        plaintext = decrypt_aes_gcm(message_key, ciphertext, iv, auth_tag)
 
         # 4. 验证发送方签名
         sender_signature = base64.b64decode(msg["sender_signature"])
-        expected_signature = hmac.new(
-            message_key,
-            ciphertext,
-            hashlib.sha256
-        ).digest()
+        expected_signature = hmac.new(message_key, ciphertext, hashlib.sha256).digest()
 
         if not hmac.compare_digest(sender_signature, expected_signature):
             raise ValueError("Invalid sender signature")
@@ -242,16 +190,12 @@ class GroupManager:
         updated_chain = {
             "chain_key": receiving_chain["chain_key"],
             "message_number": receiving_chain["message_number"] + 1,
-            "skip_keys": receiving_chain["skip_keys"]
+            "skip_keys": receiving_chain["skip_keys"],
         }
 
         return plaintext.decode(), updated_chain
 
-    def update_group_root_key(
-        self,
-        current_root_key: bytes,
-        new_member_public_key: bytes
-    ) -> bytes:
+    def update_group_root_key(self, current_root_key: bytes, new_member_public_key: bytes) -> bytes:
         """
         更新群组root key（成员加入）
 
@@ -263,12 +207,7 @@ class GroupManager:
             bytes: 新root key
         """
         # 派生新root key
-        new_root_key = hkdf(
-            current_root_key,
-            b"",
-            new_member_public_key,
-            CHAIN_KEY_LENGTH
-        )
+        new_root_key = hkdf(current_root_key, b"", new_member_public_key, CHAIN_KEY_LENGTH)
 
         self.root_key = new_root_key
         return new_root_key
@@ -284,12 +223,7 @@ class GroupManager:
             bytes: 新root key
         """
         # 派生新root key
-        new_root_key = hkdf(
-            current_root_key,
-            b"",
-            b"new-root-key-after-leave",
-            CHAIN_KEY_LENGTH
-        )
+        new_root_key = hkdf(current_root_key, b"", b"new-root-key-after-leave", CHAIN_KEY_LENGTH)
 
         self.root_key = new_root_key
         return new_root_key
