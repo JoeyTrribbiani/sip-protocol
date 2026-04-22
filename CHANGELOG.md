@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-04-22
 
 ### 新增
 
@@ -27,6 +27,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 最大重试次数（默认3次）
   - 队列状态查询
   - 11个测试全部通过
+
+#### 多Agent加密通信配置
+- SIP MCP Server（`python -m sip_protocol --psk <key>`）
+  - stdio JSON-RPC 2.0 MCP协议
+  - 4个工具：sip_handshake / sip_encrypt / sip_decrypt / sip_rekey
+  - 三重DH握手端到端测试通过
+- 多Agent配置指南（docs/multi-agent-setup.md）
+  - OpenClaw / Hermes / Claude Code 三方适配器配置
+  - PSK密钥分发
+  - 集体决策/持久化/离线队列使用示例
+
+#### 测试覆盖补充
+- session.py: 18% → 100%
+- group.py: 43% → 91%
+- nonce.py: 60% → 95%
+- 新增68个测试
+
+### 变更
+
+#### 包结构重构
+- 创建 `sip_protocol` 父包（crypto/protocol/transport/managers）
+- 所有模块从 `src.xxx` 迁移至 `sip_protocol.xxx`
+- 添加 `__main__.py` 入口：`python -m sip_protocol`
+- 删除临时standalone脚本，使用原有 sip_mcp_server.py
+- 所有测试导入路径同步更新
+- CI配置更新：pylint/mypy/black/coverage 路径指向 `src/sip_protocol/`
+
+### 修复
+
+- JS XChaCha20-Poly1305 Buffer兼容性：@noble/ciphers要求纯Uint8Array，不能传Node.js Buffer
+- offline_queue MyPy类型错误：message.get返回Any，用str()包裹
+- WebSocket传输层文档标记不一致：架构图从🟡修正为✅
+
+### 文档
+
+- 架构分析报告（docs/sip-protocol-report.md）：87/100 A级
+- Agent通信适配度分析：加密层95%，应用层30%
+- 演进路线图：短期/中期/长期改进计划
+- 与A2A/MCP整合策略
+
+### 统计
+
+- 测试：328 passed, 3 skipped
+- 覆盖率：81%
+- Pylint：10.00/10
+- Black：通过
+
+## [Unreleased]
 
 ## [1.2.0] - 2026-04-22
 
