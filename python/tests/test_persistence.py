@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.protocol.persistence import MessageStore
+from sip_protocol.protocol.persistence import MessageStore
 
 
 class TestMessageStore:

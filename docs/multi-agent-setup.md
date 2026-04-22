@@ -33,7 +33,7 @@ Hermes ──SIP加密──► OpenClaw Agent ──SIP加密──► Claude C
 }
 ```
 
-> **注意**: 使用`sip_mcp_server_standalone.py`（独立版），而非`src/transport/sip_mcp_server.py`（相对导入无法独立运行）。
+> **注意**: 使用`python -m sip_protocol`启动（包安装后可用），无需独立脚本。
 
 Hermes端同样配置（在`mcp_config.json`中）：
 

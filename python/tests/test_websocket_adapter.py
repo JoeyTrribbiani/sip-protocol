@@ -23,18 +23,18 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not HAS_WEBSOCKETS, reason="websockets库未安装")
 
-from src.transport.websocket_adapter import (
+from sip_protocol.transport.websocket_adapter import (
     WebSocketAdapter,
     WebSocketConfig,
 )
-from src.transport.base import (
+from sip_protocol.transport.base import (
     TransportType,
     TransportState,
     ConnectionResult,
     SendResult,
     ReceiveResult,
 )
-from src.transport.message import (
+from sip_protocol.transport.message import (
     AgentMessage,
     MessageType,
     create_text_message,

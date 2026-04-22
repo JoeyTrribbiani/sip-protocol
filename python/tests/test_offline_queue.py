@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.protocol.offline_queue import OfflineQueue
+from sip_protocol.protocol.offline_queue import OfflineQueue
 
 
 class TestOfflineQueue:

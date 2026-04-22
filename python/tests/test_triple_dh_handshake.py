@@ -7,7 +7,17 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src import *
+from sip_protocol.protocol.message import (
+    encrypt_message,
+    decrypt_message,
+    generate_replay_tag,
+    verify_replay_tag,
+)
+from sip_protocol.protocol.handshake import (
+    initiate_handshake,
+    respond_handshake,
+    complete_handshake,
+)
 
 
 def test_triple_dh_handshake():

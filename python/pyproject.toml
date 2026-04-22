@@ -55,7 +55,7 @@ Documentation = "https://github.com/JoeyTrribbiani/sip-protocol/tree/main/docs"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["*"]
+include = ["sip_protocol*"]
 
 [tool.black]
 line-length = 100

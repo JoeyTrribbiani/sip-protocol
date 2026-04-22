@@ -9,7 +9,14 @@ from cryptography.hazmat.primitives import serialization
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src import *
+from sip_protocol.crypto.dh import generate_keypair, dh_exchange
+from sip_protocol.crypto.argon2 import hash_psk
+from sip_protocol.protocol.message import encrypt_message, decrypt_message, generate_replay_tag
+from sip_protocol.protocol.group import GroupManager
+from sip_protocol.managers.nonce import NonceManager
+from sip_protocol.crypto.xchacha20_poly1305 import generate_nonce
+from sip_protocol.protocol.handshake import HANDSHAKE_NONCE_LENGTH
+from sip_protocol.crypto.hkdf import derive_keys
 
 
 def test_basic_handshake():

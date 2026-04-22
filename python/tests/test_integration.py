@@ -15,20 +15,20 @@ from cryptography.hazmat.primitives import serialization
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.protocol.handshake import (
+from sip_protocol.protocol.handshake import (
     initiate_handshake,
     respond_handshake,
     complete_handshake,
 )
-from src.protocol.message import encrypt_message, decrypt_message, generate_replay_tag
-from src.protocol.rekey import RekeyManager
-from src.protocol.resume import (
+from sip_protocol.protocol.message import encrypt_message, decrypt_message, generate_replay_tag
+from sip_protocol.protocol.rekey import RekeyManager
+from sip_protocol.protocol.resume import (
     serialize_session_state,
     deserialize_session_state,
     is_session_expired,
 )
-from src.managers.nonce import NonceManager
-from src.managers.session import SessionState
+from sip_protocol.managers.nonce import NonceManager
+from sip_protocol.managers.session import SessionState
 
 
 def test_full_handshake_flow():
@@ -158,7 +158,7 @@ def _test_connection_resume(session_state):
     print("\n=== 测试4：连接恢复流程 ===")
 
     # 创建会话恢复状态
-    from src.protocol.resume import SessionResumeState
+    from sip_protocol.protocol.resume import SessionResumeState
 
     resume_state = SessionResumeState(
         session_id="agent-a",
@@ -212,7 +212,7 @@ def _test_connection_resume(session_state):
     print("✅ 会话未过期")
 
     # 测试过期检查（创建一个过期的会话）
-    from src.protocol.resume import SESSION_TTL
+    from sip_protocol.protocol.resume import SESSION_TTL
 
     expired_state = SessionResumeState(
         session_id="agent-a",
@@ -296,7 +296,7 @@ def test_full_lifecycle():
 
     # 5. 连接恢复
     print("\n--- 阶段5：连接恢复 ---")
-    from src.protocol.resume import SessionResumeState
+    from sip_protocol.protocol.resume import SessionResumeState
 
     resume_state = SessionResumeState(
         session_id="agent-a",

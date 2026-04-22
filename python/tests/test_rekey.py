@@ -4,7 +4,7 @@ Rekey密钥轮换测试
 
 import pytest
 import time
-from src.protocol.rekey import RekeyManager, REKEY_NONCE_LENGTH
+from sip_protocol.protocol.rekey import RekeyManager, REKEY_NONCE_LENGTH
 
 
 def test_rekey_request_creation():
@@ -308,7 +308,7 @@ def test_rekey_forward_secrecy():
     new_enc_key = session_state_a["encryption_key"]
 
     # 尝试用旧密钥解密（应该失败）
-    from src.protocol.message import encrypt_message, decrypt_message
+    from sip_protocol.protocol.message import encrypt_message, decrypt_message
 
     # 用新密钥加密消息
     encrypted_msg = encrypt_message(

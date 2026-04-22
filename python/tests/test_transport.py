@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from src.transport.message import (
+from sip_protocol.transport.message import (
     AgentMessage,
     MessageType,
     MessagePriority,
@@ -35,12 +35,12 @@ from src.transport.message import (
     create_encrypted_message,
     parse_raw_message,
 )
-from src.transport.encrypted_channel import (
+from sip_protocol.transport.encrypted_channel import (
     EncryptedChannel,
     ChannelState,
     ChannelConfig,
 )
-from src.transport.openclaw_adapter import (
+from sip_protocol.transport.openclaw_adapter import (
     OpenClawAdapter,
     AgentConfig,
     SpawnResult,

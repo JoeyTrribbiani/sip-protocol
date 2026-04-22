@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.protocol.decision import (
+from sip_protocol.protocol.decision import (
     DecisionEngine,
     DecisionResult,
     DecisionStrategy,

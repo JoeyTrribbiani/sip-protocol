@@ -7,7 +7,7 @@ import pytest
 import time
 import base64
 import json
-from src.protocol.version import (
+from sip_protocol.protocol.version import (
     negotiate_version,
     validate_version,
     version_compare,
@@ -15,7 +15,7 @@ from src.protocol.version import (
     PROTOCOL_VERSIONS,
     DEFAULT_VERSION,
 )
-from src.protocol.fragment import (
+from sip_protocol.protocol.fragment import (
     FragmentBuffer,
     generate_fragment_id,
     fragment_message,
@@ -23,7 +23,7 @@ from src.protocol.fragment import (
     MAX_MESSAGE_SIZE,
     MAX_PAYLOAD_SIZE,
 )
-from src.protocol.resume import (
+from sip_protocol.protocol.resume import (
     SessionResumeState,
     serialize_session_state,
     deserialize_session_state,

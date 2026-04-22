@@ -13,8 +13,8 @@ import hashlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.protocol.group import GroupManager, GROUP_PROTOCOL_VERSION
-from src.crypto.hkdf import hkdf
+from sip_protocol.protocol.group import GroupManager, GROUP_PROTOCOL_VERSION
+from sip_protocol.crypto.hkdf import hkdf
 
 # ==================== 辅助函数 ====================
 

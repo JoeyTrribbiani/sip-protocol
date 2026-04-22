@@ -13,7 +13,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.transport.sip_mcp_server import (
+from sip_protocol.transport.sip_mcp_server import (
     SipMcpServer,
     JSONRPCError,
     make_response,
@@ -29,8 +29,8 @@ from src.transport.sip_mcp_server import (
     SIP_DECRYPTION_FAILED,
     SIP_HANDSHAKE_FAILED,
 )
-from src.transport.message import AgentMessage, MessageType, ControlAction
-from src.transport.encrypted_channel import ChannelState
+from sip_protocol.transport.message import AgentMessage, MessageType, ControlAction
+from sip_protocol.transport.encrypted_channel import ChannelState
 
 # ──────────────── 测试辅助 ────────────────
 

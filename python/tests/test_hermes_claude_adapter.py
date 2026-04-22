@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # 添加项目路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.transport.hermes_claude_adapter import HermesClaudeAdapter
+from sip_protocol.transport.hermes_claude_adapter import HermesClaudeAdapter
 
 
 class TestHermesClaudeAdapter:

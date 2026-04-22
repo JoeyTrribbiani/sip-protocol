@@ -12,7 +12,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.transport.base import (
+from sip_protocol.transport.base import (
     TransportAdapter,
     TransportType,
     TransportState,
@@ -22,7 +22,7 @@ from src.transport.base import (
     ReceiveResult,
     create_transport,
 )
-from src.transport.message import AgentMessage, MessageType
+from sip_protocol.transport.message import AgentMessage, MessageType
 
 # ──────────────── 枚举测试 ────────────────
 
