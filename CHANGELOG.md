@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增
+
+#### 消息持久化
+- **MessageStore**（src/protocol/persistence.py）
+  - 基于SQLite的轻量级消息存储
+  - 按发送者/接收者/类型/时间/会话过滤查询
+  - 分页支持（limit + offset）
+  - 过期消息自动清理（默认30天）
+  - 加密消息原样存储
+  - 会话列表查询
+  - 14个测试全部通过
+
 ## [1.2.0] - 2026-04-22
 
 ### 新增
