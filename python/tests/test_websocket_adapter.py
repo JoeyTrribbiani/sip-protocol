@@ -13,6 +13,15 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 检查websockets是否安装
+try:
+    import websockets as _websockets  # noqa: F401
+    HAS_WEBSOCKETS = True
+except ImportError:
+    HAS_WEBSOCKETS = False
+
+pytestmark = pytest.mark.skipif(not HAS_WEBSOCKETS, reason="websockets库未安装")
+
 from src.transport.websocket_adapter import (
     WebSocketAdapter,
     WebSocketConfig,

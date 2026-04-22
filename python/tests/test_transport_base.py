@@ -348,15 +348,21 @@ class TestCreateTransport:
     """传输适配器工厂函数测试"""
 
     def test_create_websocket_adapter(self):
-        adapter = create_transport(TransportType.WEBSOCKET, agent_id="test")
-        assert adapter is not None
-        assert adapter.transport_type == TransportType.WEBSOCKET
+        try:
+            adapter = create_transport(TransportType.WEBSOCKET, agent_id="test")
+            assert adapter is not None
+            assert adapter.transport_type == TransportType.WEBSOCKET
+        except ImportError:
+            pytest.skip("websockets库未安装")
 
     def test_unsupported_type_raises(self):
         with pytest.raises(ValueError, match="不支持的传输类型"):
             create_transport(TransportType.HTTP)
 
     def test_create_with_custom_config(self):
-        config = TransportConfig(connect_timeout=60)
-        adapter = create_transport(TransportType.WEBSOCKET, config=config, agent_id="test")
-        assert adapter.config.connect_timeout == 60
+        try:
+            config = TransportConfig(connect_timeout=60)
+            adapter = create_transport(TransportType.WEBSOCKET, config=config, agent_id="test")
+            assert adapter.config.connect_timeout == 60
+        except ImportError:
+            pytest.skip("websockets库未安装")
