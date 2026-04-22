@@ -20,6 +20,7 @@ from .message import (
 from .encrypted_channel import EncryptedChannel, ChannelState
 from .openclaw_adapter import OpenClawAdapter
 from .sip_mcp_server import SipMcpServer
+from .hermes_claude_adapter import HermesClaudeAdapter
 
 __all__ = [
     # 消息
@@ -35,6 +36,7 @@ __all__ = [
     "ChannelState",
     # 适配器
     "OpenClawAdapter",
+    "HermesClaudeAdapter",
     # MCP Server
     "SipMcpServer",
 ]
