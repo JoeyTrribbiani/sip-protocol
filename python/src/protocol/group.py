@@ -560,9 +560,6 @@ class GroupManager:
         message_key = hkdf(self.root_key, message_context, b"group-message-key", MESSAGE_KEY_LENGTH)
 
         # 调试：打印密钥信息
-        print(f"[DEBUG SEND] sender_id={sender_id}, msg_num={sending_chain['message_number']}")
-        print(f"[DEBUG SEND] message_context={message_context!r}")
-        print(f"[DEBUG SEND] message_key={message_key.hex()}")
 
         # 2. 加密消息
         iv = os.urandom(AES_GCM_NONCE_LENGTH)
@@ -619,9 +616,6 @@ class GroupManager:
         message_key = hkdf(self.root_key, message_context, b"group-message-key", MESSAGE_KEY_LENGTH)
 
         # 调试：打印密钥信息
-        print(f"[DEBUG RECEIVE] sender_id={sender_id}, msg_num={message_number}")
-        print(f"[DEBUG RECEIVE] message_context={message_context!r}")
-        print(f"[DEBUG RECEIVE] message_key={message_key.hex()}")
 
         # 3. 解密消息
         iv = base64.b64decode(msg["iv"])

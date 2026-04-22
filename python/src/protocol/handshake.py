@@ -130,14 +130,6 @@ def respond_handshake(
     # shared_3: ephemeral_local × remote_ephemeral
     shared_3 = dh_exchange(ephemeral_private_key, remote_ephemeral_pub)
 
-    # 三重DH密钥交换（响应方视角）
-    # shared_1: identity_local × remote_ephemeral
-    shared_1 = dh_exchange(identity_private_key, remote_ephemeral_pub)
-    # shared_2: ephemeral_local × remote_identity
-    shared_2 = dh_exchange(ephemeral_private_key, remote_identity_pub)
-    # shared_3: ephemeral_local × remote_ephemeral
-    shared_3 = dh_exchange(ephemeral_private_key, remote_ephemeral_pub)
-
     # PSK哈希
     psk_hash, _ = hash_psk(psk)
 

@@ -35,7 +35,6 @@ from .message import (
 )
 from .encrypted_channel import EncryptedChannel, ChannelState, ChannelConfig
 
-
 # ──────────────── 数据类 ────────────────
 
 
@@ -158,9 +157,7 @@ class OpenClawAdapter:
         """通道错误回调"""
         self._stats["errors"] += 1
 
-    def _on_channel_state_change(
-        self, old_state: ChannelState, new_state: ChannelState
-    ) -> None:
+    def _on_channel_state_change(self, old_state: ChannelState, new_state: ChannelState) -> None:
         """通道状态变更回调"""
         pass  # 可扩展用于日志/监控
 
@@ -300,9 +297,12 @@ class OpenClawAdapter:
         session_label = label or f"{self.agent_id}-session-{int(time.time())}"
 
         args = [
-            "sessions", "spawn",
-            "--task", task,
-            "--label", session_label,
+            "sessions",
+            "spawn",
+            "--task",
+            task,
+            "--label",
+            session_label,
         ]
         if model:
             args.extend(["--model", model])
@@ -360,9 +360,12 @@ class OpenClawAdapter:
             payload = message
 
         args = [
-            "sessions", "send",
-            "--label", session_label,
-            "--message", payload,
+            "sessions",
+            "send",
+            "--label",
+            session_label,
+            "--message",
+            payload,
         ]
 
         try:

@@ -278,9 +278,7 @@ class EncryptedChannel:
 
         try:
             handshake_auth = auth_msg.payload.get("data", auth_msg.payload)
-            session_keys, session_state = complete_handshake(
-                handshake_auth, self._handshake_state
-            )
+            session_keys, session_state = complete_handshake(handshake_auth, self._handshake_state)
             self._session_keys = session_keys
             self._session_state = SessionState()
             self._session_state.agent_id = self.agent_id
@@ -404,15 +402,11 @@ class EncryptedChannel:
 
         # 检查消息计数器（防止重放）
         if message_counter <= self._recv_counter:
-            raise ValueError(
-                f"消息计数器异常：收到 {message_counter}，期望 > {self._recv_counter}"
-            )
+            raise ValueError(f"消息计数器异常：收到 {message_counter}，期望 > {self._recv_counter}")
 
         # 解密消息
         try:
-            plaintext = decrypt_message(
-                self._session_keys["encryption_key"], encrypted_payload
-            )
+            plaintext = decrypt_message(self._session_keys["encryption_key"], encrypted_payload)
         except Exception as e:
             self._stats["errors"] += 1
             if self._on_error:
