@@ -447,7 +447,7 @@ class OpenClawAdapter:
     ) -> Dict[str, Any]:
         """处理Gateway响应"""
         if response.status == 200:
-            return response.json()
+            return dict(response.json())
         if response.status == 401:
             raise RuntimeError("Gateway认证失败：请检查OPENCLAW_API_KEY或OPENCLAW_GATEWAY_TOKEN")
         if response.status == 404:
@@ -513,7 +513,7 @@ class OpenClawAdapter:
                         timeout=aiohttp.ClientTimeout(total=request_timeout),
                     ) as response:
                         try:
-                            return await self._handle_gateway_response(
+                            return self._handle_gateway_response(
                                 response,
                                 path,
                                 attempt,
@@ -597,7 +597,7 @@ class OpenClawAdapter:
             path="/messages/read",
             data=params,
         )
-        messages = result.get("messages", [])
+        messages: List[Dict[str, Any]] = result.get("messages", [])  # type: ignore[assignment]
 
         # 如果通道已建立，尝试解密加密消息
         if self.is_connected:
@@ -635,7 +635,7 @@ class OpenClawAdapter:
             path="/channels/list",
             data=params,
         )
-        return result.get("channels", [])
+        return list(result.get("channels", []))  # type: ignore[arg-type]
 
     # ──────────────── 转发 ────────────────
 

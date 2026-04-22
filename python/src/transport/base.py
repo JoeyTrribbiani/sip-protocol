@@ -164,7 +164,7 @@ class TransportAdapter(ABC):
 
     async def __aenter__(self) -> "TransportAdapter":
         """异步上下文管理器入口"""
-        await self.connect()  # pylint: disable=no-value-for-parameter
+        await self.connect("")  # type: ignore[arg-type]
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -309,6 +309,6 @@ def create_transport(
     # WebSocketAdapter需要agent_id作为第一个参数
     if transport_type == TransportType.WEBSOCKET:
         agent_id = kwargs.pop("agent_id", "default-agent")
-        return adapter_class(agent_id=agent_id, config=config, **kwargs)
+        return adapter_class(agent_id=agent_id, config=config, **kwargs)  # type: ignore[no-any-return]
 
-    return adapter_class(config=config, **kwargs)
+    return adapter_class(config=config, **kwargs)  # type: ignore[no-any-return]

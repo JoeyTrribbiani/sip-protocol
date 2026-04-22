@@ -249,7 +249,7 @@ class WebSocketAdapter(TransportAdapter):
 
                 latency_ms = int((time.time() - start_time) * 1000)
                 self._set_state(TransportState.CONNECTED)
-                self._stats["connected_at"] = time.time()
+                self._stats["connected_at"] = time.time()  # type: ignore[assignment]
 
                 # 启动接收任务
                 self._receive_task = asyncio.create_task(self._receive_loop())
@@ -368,8 +368,8 @@ class WebSocketAdapter(TransportAdapter):
                 timeout=send_timeout,
             )
 
-            self._stats["messages_sent"] += 1
-            self._stats["bytes_sent"] += bytes_sent
+            self._stats["messages_sent"] = self._stats.get("messages_sent", 0) + 1
+            self._stats["bytes_sent"] = self._stats.get("bytes_sent", 0) + bytes_sent
 
             return SendResult(
                 success=True,
@@ -410,8 +410,8 @@ class WebSocketAdapter(TransportAdapter):
                 )
 
             bytes_received = len(message.to_json().encode("utf-8"))
-            self._stats["messages_received"] += 1
-            self._stats["bytes_received"] += bytes_received
+            self._stats["messages_received"] = self._stats.get("messages_received", 0) + 1
+            self._stats["bytes_received"] = self._stats.get("bytes_received", 0) + bytes_received
 
             return ReceiveResult(
                 success=True,
@@ -553,7 +553,7 @@ class WebSocketAdapter(TransportAdapter):
 
                 if self._websocket is not None:
                     await self._websocket.ping()
-                    self._stats["last_heartbeat_at"] = time.time()
+                    self._stats["last_heartbeat_at"] = time.time()  # type: ignore[assignment]
 
             except (ConnectionError, OSError) as e:
                 self._handle_error(e)
