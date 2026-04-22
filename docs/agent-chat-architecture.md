@@ -46,7 +46,7 @@
 连接方式:
 ✅ Agent A (决策型) ↔ Agent B (调度型): MCP双向
 ✅ Agent B (调度型) → Agent C (执行型): sessions_spawn (ACP)
-🟡 Agent A (决策型) → Agent C (执行型): 待实现适配器
+✅ Agent A (决策型) → Agent C (执行型): SIP加密适配器
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -116,9 +116,9 @@
 ✅ Transport层 (消息格式 + 加密通道 + OpenClaw适配器)
 
 待实现特性:
-🟡 集体决策机制
-🟡 消息持久化
-🟡 离线消息队列
+✅ 集体决策机制
+✅ 消息持久化
+✅ 离线消息队列
 🟡 文件/图片/视频传输
 ```
 
@@ -230,11 +230,11 @@
 | | Transport层 (消息格式) | ✅ 完成 | python/src/transport/message.py |
 | | Transport层 (加密通道) | ✅ 完成 | python/src/transport/encrypted_channel.py |
 | | Transport层 (OpenClaw适配器) | ✅ 完成 | python/src/transport/openclaw_adapter.py |
-| | OpenClaw桥接 (真正调用API) | ❌ 未实现 | 需要调用Gateway API |
-| | MCP Server封装 | ❌ 未实现 | 让agent通过MCP调用SIP |
+| | OpenClaw桥接 (真正调用API) | ✅ 完成 | python/src/transport/openclaw_adapter.py |
+| | MCP Server封装 | ✅ 完成 | python/src/transport/sip_mcp_server.py |
 | | 集体决策机制 | ✅ 完成 | python/src/protocol/decision.py |
-| | 消息持久化 | ❌ 未实现 | |
-| | 离线消息队列 | ❌ 未实现 | |
+| | 消息持久化 | ✅ 完成 | python/src/protocol/persistence.py |
+| | 离线消息队列 | ✅ 完成 | python/src/protocol/offline_queue.py |
 | | 文件/图片/视频传输 | ❌ 未实现 | |
 | **Phase 3** | 远程MCP桥接 | ❌ 未实现 | |
 | | QUIC + WebRTC传输层 | ❌ 未实现 | |
@@ -279,17 +279,25 @@ sip-protocol/
 │   │   │   ├── fragment.py      ✅ 消息分片
 │   │   │   ├── resume.py        ✅ 连接恢复
 │   │   │   ├── group.py         ✅ 群组加密
-│   │   │   └── group_simple.py  ✅ 简化群组
+│   │   │   ├── group_simple.py  ✅ 简化群组
+│   │   │   ├── decision.py      ✅ 集体决策机制
+│   │   │   ├── persistence.py   ✅ 消息持久化 (SQLite)
+│   │   │   └── offline_queue.py ✅ 离线消息队列
 │   │   ├── transport/       # 传输层
 │   │   │   ├── message.py       ✅ Agent消息格式
 │   │   │   ├── encrypted_channel.py ✅ 加密通道
-│   │   │   └── openclaw_adapter.py  ✅ OpenClaw适配器
+│   │   │   ├── openclaw_adapter.py  ✅ OpenClaw适配器
+│   │   │   ├── base.py           ✅ 传输层抽象接口
+│   │   │   ├── websocket_adapter.py ✅ WebSocket传输
+│   │   │   ├── sip_mcp_server.py    ✅ MCP Server封装
+│   │   │   └── hermes_claude_adapter.py ✅ Hermes↔Claude加密适配器
 │   │   └── managers/        # 管理器
 │   │       ├── session.py       ✅ 会话管理
 │   │       └── nonce.py         ✅ Nonce管理
-│   ├── tests/               # 测试 (117个)
+│   ├── tests/               # 测试 (260个)
 │   └── examples/
-│       └── three_party_chat.py  ✅ 三方通信示例
+│       ├── three_party_chat.py  ✅ 三方通信示例
+│       └── hermes_claude_encrypted.py ✅ Hermes↔Claude加密示例
 ├── javascript/              # JavaScript实现
 │   └── src/
 ├── docs/                    # 文档
