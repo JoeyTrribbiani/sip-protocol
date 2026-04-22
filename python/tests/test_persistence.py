@@ -54,10 +54,10 @@ class TestMessageStore:
                 }
             )
 
-        results = store.query(sender="agent-a")
+        results = store.query(filters={"sender": "agent-a"})
         assert len(results) == 3
 
-        results_b = store.query(sender="agent-b")
+        results_b = store.query(filters={"sender": "agent-b"})
         assert len(results_b) == 2
         store.close()
 
@@ -68,7 +68,7 @@ class TestMessageStore:
         store.save({"id": "msg-2", "sender_id": "a", "recipient_id": "c", "payload": "hey"})
         store.save({"id": "msg-3", "sender_id": "b", "recipient_id": "b", "payload": "self"})
 
-        results = store.query(recipient="b")
+        results = store.query(filters={"recipient": "b"})
         assert len(results) == 2
         store.close()
 
@@ -86,7 +86,7 @@ class TestMessageStore:
                 }
             )
 
-        results = store.query(since=base + 150, until=base + 350)
+        results = store.query(filters={"since": base + 150, "until": base + 350})
         assert len(results) == 2
         store.close()
 
@@ -122,7 +122,7 @@ class TestMessageStore:
         store.save({"id": "msg-2", "sender_id": "a", "payload": "hey", "session_id": "sess-2"})
         store.save({"id": "msg-3", "sender_id": "a", "payload": "yo", "session_id": "sess-1"})
 
-        results = store.query(session_id="sess-1")
+        results = store.query(filters={"session_id": "sess-1"})
         assert len(results) == 2
         store.close()
 

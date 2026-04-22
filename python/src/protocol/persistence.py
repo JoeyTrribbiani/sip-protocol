@@ -127,12 +127,7 @@ class MessageStore:
 
     def query(
         self,
-        sender: Optional[str] = None,
-        recipient: Optional[str] = None,
-        message_type: Optional[str] = None,
-        session_id: Optional[str] = None,
-        since: Optional[float] = None,
-        until: Optional[float] = None,
+        filters: Optional[Dict[str, Any]] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
@@ -140,39 +135,35 @@ class MessageStore:
         查询消息
 
         Args:
-            sender: 按发送者过滤
-            recipient: 按接收者过滤
-            message_type: 按消息类型过滤
-            session_id: 按会话ID过滤
-            since: 起始时间戳
-            until: 结束时间戳
+            filters: 过滤条件，支持 sender, recipient, message_type, session_id, since, until
             limit: 返回数量限制
             offset: 偏移量
 
         Returns:
             消息列表
         """
+        flt = filters or {}
         conditions: List[str] = []
         params: List[Any] = []
 
-        if sender is not None:
+        if flt.get("sender") is not None:
             conditions.append("sender_id = ?")
-            params.append(sender)
-        if recipient is not None:
+            params.append(flt["sender"])
+        if flt.get("recipient") is not None:
             conditions.append("recipient_id = ?")
-            params.append(recipient)
-        if message_type is not None:
+            params.append(flt["recipient"])
+        if flt.get("message_type") is not None:
             conditions.append("message_type = ?")
-            params.append(message_type)
-        if session_id is not None:
+            params.append(flt["message_type"])
+        if flt.get("session_id") is not None:
             conditions.append("session_id = ?")
-            params.append(session_id)
-        if since is not None:
+            params.append(flt["session_id"])
+        if flt.get("since") is not None:
             conditions.append("created_at >= ?")
-            params.append(since)
-        if until is not None:
+            params.append(flt["since"])
+        if flt.get("until") is not None:
             conditions.append("created_at <= ?")
-            params.append(until)
+            params.append(flt["until"])
 
         where = " AND ".join(conditions) if conditions else "1=1"
         sql = f"SELECT * FROM messages WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?"
