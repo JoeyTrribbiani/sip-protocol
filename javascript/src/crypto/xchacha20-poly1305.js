@@ -17,13 +17,15 @@ const NONCE_LENGTH = 24;
  * @param {Buffer} nonce - 初始化向量（24字节）
  * @returns {Object} { ciphertext, authTag }
  */
-function encryptXChaCha20Poly1305(key, plaintext, nonce) {
-  // 使用 @noble/ciphers 的 XChaCha20-Poly1305 实现
-  // @noble/ciphers接受Buffer并返回Uint8Array
-  const cipher = xchacha20poly1305(key, nonce);
-  const ciphertextUint8 = cipher.encrypt(plaintext);
+function _toUint8Array(buf) {
+  // @noble/ciphers 要求纯 Uint8Array，不能是 Buffer（Buffer 的 .buffer 可能是共享的 ArrayBuffer）
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
+}
 
-  // 转换Uint8Array为Buffer
+function encryptXChaCha20Poly1305(key, plaintext, nonce) {
+  const cipher = xchacha20poly1305(_toUint8Array(key), _toUint8Array(nonce));
+  const ciphertextUint8 = cipher.encrypt(_toUint8Array(plaintext));
+
   const ciphertext = Buffer.from(ciphertextUint8);
 
   // XChaCha20-Poly1305: 最后16字节是认证标签
@@ -42,17 +44,12 @@ function encryptXChaCha20Poly1305(key, plaintext, nonce) {
  * @returns {Buffer} 明文
  */
 function decryptXChaCha20Poly1305(key, ciphertext, nonce, authTag) {
-  // 重组密文和认证标签
   const ciphertextWithTag = Buffer.concat([ciphertext, authTag]);
 
-  // 使用 @noble/ciphers 的 XChaCha20-Poly1305 实现
-  const cipher = xchacha20poly1305(key, nonce);
-  const plaintextUint8 = cipher.decrypt(ciphertextWithTag);
+  const cipher = xchacha20poly1305(_toUint8Array(key), _toUint8Array(nonce));
+  const plaintextUint8 = cipher.decrypt(_toUint8Array(ciphertextWithTag));
 
-  // 转换Uint8Array为Buffer
-  const plaintext = Buffer.from(plaintextUint8);
-
-  return plaintext;
+  return Buffer.from(plaintextUint8);
 }
 
 /**
