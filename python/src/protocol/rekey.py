@@ -22,6 +22,11 @@ class RekeyManager:
     Rekey管理器
     """
 
+    @property
+    def temp_new_keys(self) -> dict:
+        """获取临时新密钥"""
+        return self._temp_new_keys
+
     def __init__(self, session_state, is_initiator: bool = False):
         """
         构造函数

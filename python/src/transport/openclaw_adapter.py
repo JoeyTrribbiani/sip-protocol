@@ -30,22 +30,7 @@ try:
 except ImportError:
     aiohttp = None  # type: ignore
 
-from .base import (
-    TransportAdapter,
-    TransportType,
-    TransportState,
-    TransportConfig,
-    ConnectionResult,
-    SendResult,
-    ReceiveResult,
-)
-from .message import (
-    AgentMessage,
-    MessageType,
-    ControlAction,
-    create_control_message,
-    create_text_message,
-)
+from .message import AgentMessage, MessageType
 from .encrypted_channel import EncryptedChannel, ChannelState, ChannelConfig
 
 # ──────────────── 数据类 ────────────────
@@ -450,9 +435,32 @@ class OpenClawAdapter:
         self._inbound_queue.clear()
         return msgs
 
-    # ──────────────── 转发 ────────────────
-
     # ──────────────── Gateway API操作 ────────────────
+
+    def _handle_gateway_response(
+        self,
+        response,
+        path: str,
+        attempt: int,
+        max_retries: int,
+        retry_delay: float,
+    ) -> Dict[str, Any]:
+        """处理Gateway响应"""
+        if response.status == 200:
+            return response.json()
+        if response.status == 401:
+            raise RuntimeError("Gateway认证失败：请检查OPENCLAW_API_KEY或OPENCLAW_GATEWAY_TOKEN")
+        if response.status == 404:
+            raise RuntimeError(f"Gateway API端点不存在: {path}")
+        if response.status >= 500:
+            # 服务端错误，重试
+            text = response.text
+            last_error = RuntimeError(f"Gateway服务端错误 ({response.status}): {text}")
+            if attempt < max_retries - 1:
+                raise last_error  # 重新抛出以触发重试
+            raise last_error
+        text = response.text
+        raise RuntimeError(f"Gateway请求失败 ({response.status}): {text}")
 
     async def _gateway_request(
         self,
@@ -504,27 +512,20 @@ class OpenClawAdapter:
                         json=data,
                         timeout=aiohttp.ClientTimeout(total=request_timeout),
                     ) as response:
-                        if response.status == 200:
-                            return await response.json()
-                        elif response.status == 401:
-                            raise RuntimeError(
-                                "Gateway认证失败：请检查OPENCLAW_API_KEY或OPENCLAW_GATEWAY_TOKEN"
+                        try:
+                            return await self._handle_gateway_response(
+                                response,
+                                path,
+                                attempt,
+                                gateway_config.max_retries,
+                                gateway_config.retry_delay,
                             )
-                        elif response.status == 404:
-                            raise RuntimeError(f"Gateway API端点不存在: {path}")
-                        elif response.status >= 500:
-                            # 服务端错误，重试
-                            text = await response.text()
-                            last_error = RuntimeError(
-                                f"Gateway服务端错误 ({response.status}): {text}"
-                            )
-                            if attempt < gateway_config.max_retries - 1:
+                        except RuntimeError as e:
+                            if "服务端错误" in str(e) and attempt < gateway_config.max_retries - 1:
+                                last_error = e
                                 await asyncio.sleep(gateway_config.retry_delay * (attempt + 1))
                                 continue
-                            raise last_error
-                        else:
-                            text = await response.text()
-                            raise RuntimeError(f"Gateway请求失败 ({response.status}): {text}")
+                            raise e
             except aiohttp.ClientConnectorError as e:
                 last_error = RuntimeError(f"无法连接到Gateway ({gateway_config.gateway_url}): {e}")
                 if attempt < gateway_config.max_retries - 1:
@@ -594,7 +595,7 @@ class OpenClawAdapter:
         result = await self._gateway_request(
             method="GET",
             path="/messages/read",
-            data=params if False else None,
+            data=params,
         )
         messages = result.get("messages", [])
 
@@ -607,7 +608,7 @@ class OpenClawAdapter:
                         agent_msg = AgentMessage.from_json(content)
                         plaintext = self.receive_encrypted(agent_msg)
                         msg_data["decrypted_content"] = plaintext
-                    except Exception:
+                    except (ValueError, KeyError):
                         pass  # 无法解密，保留原始内容
 
         return messages
@@ -632,7 +633,7 @@ class OpenClawAdapter:
         result = await self._gateway_request(
             method="GET",
             path="/channels/list",
-            data=params if False else None,
+            data=params,
         )
         return result.get("channels", [])
 

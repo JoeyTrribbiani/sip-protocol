@@ -18,11 +18,11 @@ import argparse
 import base64
 import json
 import sys
-import traceback
 from typing import Any, Dict, Optional
 
-from .encrypted_channel import EncryptedChannel, ChannelConfig, ChannelState
-from .message import AgentMessage, MessageType, ControlAction
+from ..protocol.rekey import RekeyManager
+from .encrypted_channel import EncryptedChannel, ChannelConfig
+from .message import AgentMessage
 
 # ──────────────── JSON-RPC 2.0 ────────────────
 
@@ -200,7 +200,7 @@ class SipMcpServer:
 
     # ──────────────── MCP协议方法 ────────────────
 
-    def handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_initialize(self, _params: Dict[str, Any]) -> Dict[str, Any]:
         """处理MCP initialize请求"""
         self._initialized = True
         return {
@@ -277,7 +277,7 @@ class SipMcpServer:
                     }
                 ],
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError, KeyError) as e:
             raise JSONRPCError(
                 SIP_ENCRYPTION_FAILED,
                 f"加密失败: {e}",
@@ -300,7 +300,7 @@ class SipMcpServer:
             # 支持base64编码和直接JSON两种格式
             try:
                 msg_json = base64.b64decode(encrypted_message).decode()
-            except Exception:
+            except (ValueError, TypeError):
                 msg_json = encrypted_message
 
             agent_msg = AgentMessage.from_json(msg_json)
@@ -322,7 +322,7 @@ class SipMcpServer:
                     }
                 ],
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError, KeyError) as e:
             raise JSONRPCError(
                 SIP_DECRYPTION_FAILED,
                 f"解密失败: {e}",
@@ -338,7 +338,7 @@ class SipMcpServer:
 
         if role == "initiator":
             return self._handshake_initiator(agent_id)
-        elif role == "responder":
+        if role == "responder":
             message = args.get("message")
             if not message:
                 raise JSONRPCError(
@@ -346,7 +346,7 @@ class SipMcpServer:
                     "responder角色需要提供message参数（Hello消息）",
                 )
             return self._handshake_responder(agent_id, message)
-        elif role == "complete":
+        if role == "complete":
             message = args.get("message")
             if not message:
                 raise JSONRPCError(
@@ -354,13 +354,12 @@ class SipMcpServer:
                     "complete角色需要提供message参数（Auth消息）",
                 )
             return self._handshake_complete(message)
-        else:
-            raise JSONRPCError(
-                INVALID_PARAMS,
-                f"未知握手角色: {role}，支持: initiator, responder, complete",
-            )
+        raise JSONRPCError(
+            INVALID_PARAMS,
+            f"未知握手角色: {role}，支持: initiator, responder, complete",
+        )
 
-    def _handshake_initiator(self, agent_id: str) -> Dict[str, Any]:
+    def _handshake_initiator(self, _agent_id: str) -> Dict[str, Any]:
         """发起握手"""
         try:
             hello_msg = self._channel.initiate()
@@ -388,19 +387,19 @@ class SipMcpServer:
                     }
                 ],
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             raise JSONRPCError(
                 SIP_HANDSHAKE_FAILED,
                 f"发起握手失败: {e}",
             ) from e
 
-    def _handshake_responder(self, agent_id: str, message: str) -> Dict[str, Any]:
+    def _handshake_responder(self, _agent_id: str, message: str) -> Dict[str, Any]:
         """响应握手"""
         try:
             # 解码对方发来的Hello消息
             try:
                 msg_json = base64.b64decode(message).decode()
-            except Exception:
+            except (ValueError, TypeError):
                 msg_json = message
 
             hello_msg = AgentMessage.from_json(msg_json)
@@ -429,7 +428,7 @@ class SipMcpServer:
                     }
                 ],
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             raise JSONRPCError(
                 SIP_HANDSHAKE_FAILED,
                 f"响应握手失败: {e}",
@@ -441,7 +440,7 @@ class SipMcpServer:
             # 解码Auth消息
             try:
                 msg_json = base64.b64decode(message).decode()
-            except Exception:
+            except (ValueError, TypeError):
                 msg_json = message
 
             auth_msg = AgentMessage.from_json(msg_json)
@@ -464,7 +463,7 @@ class SipMcpServer:
                     }
                 ],
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             raise JSONRPCError(
                 SIP_HANDSHAKE_FAILED,
                 f"完成握手失败: {e}",
@@ -485,7 +484,7 @@ class SipMcpServer:
 
         if role == "initiator":
             return self._rekey_initiator()
-        elif role == "responder":
+        if role == "responder":
             message = args.get("message")
             if not message:
                 raise JSONRPCError(
@@ -493,11 +492,10 @@ class SipMcpServer:
                     "responder角色需要提供message参数（rekey请求）",
                 )
             return self._rekey_responder(message)
-        else:
-            raise JSONRPCError(
-                INVALID_PARAMS,
-                f"未知rekey角色: {role}",
-            )
+        raise JSONRPCError(
+            INVALID_PARAMS,
+            f"未知rekey角色: {role}",
+        )
 
     def _rekey_initiator(self) -> Dict[str, Any]:
         """发起密钥轮换"""
@@ -505,15 +503,13 @@ class SipMcpServer:
             # 通过channel内部触发rekey
             # 由于EncryptedChannel的rekey是内部机制，
             # 我们直接操作session_keys来模拟密钥轮换
-            if self._channel._session_keys is None:
+            if self._channel.session_keys is None:
                 raise JSONRPCError(SIP_REKEY_FAILED, "无活动会话密钥")
 
-            from ..protocol.rekey import RekeyManager
-
             session_state_dict = {
-                "encryption_key": self._channel._session_keys["encryption_key"],
-                "auth_key": self._channel._session_keys["auth_key"],
-                "replay_key": self._channel._session_keys["replay_key"],
+                "encryption_key": self._channel.session_keys["encryption_key"],
+                "auth_key": self._channel.session_keys["auth_key"],
+                "replay_key": self._channel.session_keys["replay_key"],
             }
             manager = RekeyManager(session_state_dict, is_initiator=True)
             rekey_request = manager.create_rekey_request()
@@ -545,7 +541,7 @@ class SipMcpServer:
             }
         except JSONRPCError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             raise JSONRPCError(
                 SIP_REKEY_FAILED,
                 f"发起密钥轮换失败: {e}",
@@ -557,20 +553,18 @@ class SipMcpServer:
             # 解码rekey请求
             try:
                 msg_json = base64.b64decode(message).decode()
-            except Exception:
+            except (ValueError, TypeError):
                 msg_json = message
 
             rekey_request = json.loads(msg_json)
 
-            if self._channel._session_keys is None:
+            if self._channel.session_keys is None:
                 raise JSONRPCError(SIP_REKEY_FAILED, "无活动会话密钥")
 
-            from ..protocol.rekey import RekeyManager
-
             session_state_dict = {
-                "encryption_key": self._channel._session_keys["encryption_key"],
-                "auth_key": self._channel._session_keys["auth_key"],
-                "replay_key": self._channel._session_keys["replay_key"],
+                "encryption_key": self._channel.session_keys["encryption_key"],
+                "auth_key": self._channel.session_keys["auth_key"],
+                "replay_key": self._channel.session_keys["replay_key"],
             }
             manager = RekeyManager(session_state_dict, is_initiator=False)
 
@@ -582,11 +576,11 @@ class SipMcpServer:
             rekey_response = manager.process_rekey_request(rekey_request)
 
             # 应用新密钥
-            new_keys = manager._temp_new_keys
+            new_keys = manager.temp_new_keys
             manager.apply_new_keys(new_keys)
 
             # 更新channel的session_keys
-            self._channel._session_keys.update(
+            self._channel.update_session_keys(
                 {
                     "encryption_key": new_keys["encryption_key"],
                     "auth_key": new_keys["auth_key"],
@@ -614,7 +608,7 @@ class SipMcpServer:
             }
         except JSONRPCError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError, KeyError) as e:
             raise JSONRPCError(
                 SIP_REKEY_FAILED,
                 f"响应密钥轮换失败: {e}",
@@ -658,7 +652,7 @@ class SipMcpServer:
             return make_response(request_id, result)
         except JSONRPCError as e:
             return make_error(request_id, e.code, e.message, e.data)
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError, KeyError) as e:
             return make_error(
                 request_id,
                 INTERNAL_ERROR,

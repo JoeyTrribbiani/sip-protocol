@@ -18,7 +18,6 @@ WebSocket传输适配器模块
 """
 
 import asyncio
-import json
 import time
 from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass
@@ -179,7 +178,7 @@ class WebSocketAdapter(TransportAdapter):
         if self._on_state_change_callback:
             try:
                 self._on_state_change_callback(old_state, new_state)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 if self._on_error_callback:
                     self._on_error_callback(e)
 
@@ -261,7 +260,7 @@ class WebSocketAdapter(TransportAdapter):
                 if self._on_connect_callback:
                     try:
                         self._on_connect_callback()
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         if self._on_error_callback:
                             self._on_error_callback(e)
 
@@ -274,7 +273,7 @@ class WebSocketAdapter(TransportAdapter):
 
             except asyncio.TimeoutError:
                 error = f"连接超时: {self._endpoint}"
-            except Exception as e:
+            except (ConnectionError, OSError, ValueError, RuntimeError) as e:
                 error = str(e)
 
             # 重连逻辑
@@ -318,7 +317,7 @@ class WebSocketAdapter(TransportAdapter):
         if self._websocket:
             try:
                 await self._websocket.close()
-            except Exception:
+            except (ConnectionError, OSError):
                 pass
             self._websocket = None
 
@@ -326,7 +325,7 @@ class WebSocketAdapter(TransportAdapter):
         if self._on_disconnect_callback:
             try:
                 self._on_disconnect_callback(None)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
         self._set_state(TransportState.CLOSED)
@@ -379,7 +378,7 @@ class WebSocketAdapter(TransportAdapter):
         except asyncio.TimeoutError:
             error = "发送超时"
             self._handle_error(ConnectionError(error))
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError) as e:
             error = str(e)
             self._handle_error(e)
 
@@ -479,7 +478,7 @@ class WebSocketAdapter(TransportAdapter):
                 success=False,
                 error="等待响应超时",
             )
-        except Exception as e:
+        except (RuntimeError, ValueError, ConnectionError) as e:
             return ReceiveResult(
                 success=False,
                 error=str(e),
@@ -501,7 +500,7 @@ class WebSocketAdapter(TransportAdapter):
                 # 解析消息
                 try:
                     message = parse_raw_message(raw_message)
-                except Exception as e:
+                except (ValueError, KeyError) as e:
                     self._handle_error(ValueError(f"消息解析失败: {e}"))
                     continue
 
@@ -518,7 +517,7 @@ class WebSocketAdapter(TransportAdapter):
                     if self._on_message_callback:
                         try:
                             self._on_message_callback(message)
-                        except Exception as e:
+                        except Exception as e:  # pylint: disable=broad-exception-caught
                             self._handle_error(e)
 
             except asyncio.TimeoutError:
@@ -530,7 +529,7 @@ class WebSocketAdapter(TransportAdapter):
             except ConnectionClosedError as e:
                 self._handle_error(e)
                 break
-            except Exception as e:
+            except (ConnectionError, OSError) as e:
                 self._handle_error(e)
                 break
 
@@ -554,7 +553,7 @@ class WebSocketAdapter(TransportAdapter):
                     await self._websocket.ping()
                     self._stats["last_heartbeat_at"] = time.time()
 
-            except Exception as e:
+            except (ConnectionError, OSError) as e:
                 self._handle_error(e)
                 break
 
@@ -565,7 +564,7 @@ class WebSocketAdapter(TransportAdapter):
         if self._on_error_callback:
             try:
                 self._on_error_callback(error)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
         # 如果是连接错误，触发断开回调
@@ -574,7 +573,7 @@ class WebSocketAdapter(TransportAdapter):
             if self._on_disconnect_callback:
                 try:
                     self._on_disconnect_callback(str(error))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
         else:
             self._set_state(TransportState.ERROR)

@@ -174,6 +174,16 @@ class EncryptedChannel:
         """获取通道统计信息"""
         return {**self._stats, "state": self.state.value}
 
+    @property
+    def session_keys(self) -> Optional[Dict[str, bytes]]:
+        """获取当前会话密钥（只读）"""
+        return self._session_keys
+
+    def update_session_keys(self, keys: Dict[str, bytes]) -> None:
+        """更新会话密钥"""
+        if self._session_keys is not None:
+            self._session_keys.update(keys)
+
     # ──────────────── 握手 ────────────────
 
     def initiate(self) -> AgentMessage:
