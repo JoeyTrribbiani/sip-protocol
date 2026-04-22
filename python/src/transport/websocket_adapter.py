@@ -93,9 +93,7 @@ class WebSocketAdapter(TransportAdapter):
             config: WebSocket配置
         """
         if websockets is None:
-            raise ImportError(
-                "websockets库未安装，请运行: pip install websockets"
-            )
+            raise ImportError("websockets库未安装，请运行: pip install websockets")
 
         self.agent_id = agent_id
         self.config = config or WebSocketConfig()
@@ -132,7 +130,9 @@ class WebSocketAdapter(TransportAdapter):
         self._on_connect_callback: Optional[Callable[[], None]] = None
         self._on_disconnect_callback: Optional[Callable[[Optional[str]], None]] = None
         self._on_error_callback: Optional[Callable[[Exception], None]] = None
-        self._on_state_change_callback: Optional[Callable[[TransportState, TransportState], None]] = None
+        self._on_state_change_callback: Optional[
+            Callable[[TransportState, TransportState], None]
+        ] = None
 
     # ──────────────── 属性 ────────────────
 
@@ -537,10 +537,12 @@ class WebSocketAdapter(TransportAdapter):
         # 如果是断开连接且需要重连
         if self._should_reconnect and self._endpoint:
             self._set_state(TransportState.RECONNECTING)
-            asyncio.create_task(self._connect_with_retry(
-                self.config.connect_timeout,
-                time.time(),
-            ))
+            asyncio.create_task(
+                self._connect_with_retry(
+                    self.config.connect_timeout,
+                    time.time(),
+                )
+            )
 
     async def _heartbeat_loop(self) -> None:
         """心跳保活循环"""
