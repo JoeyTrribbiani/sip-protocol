@@ -46,7 +46,6 @@ from src.transport.openclaw_adapter import (
     SpawnResult,
 )
 
-
 # ──────────────── 测试常量 ────────────────
 
 TEST_PSK = b"test-psk-for-unit-tests-32byt"
@@ -250,9 +249,7 @@ class TestAgentMessage:
     def test_all_message_types(self):
         """测试所有消息类型"""
         # TEXT
-        text_msg = create_text_message(
-            sender_id=AGENT_A_ID, recipient_id=AGENT_B_ID, text="text"
-        )
+        text_msg = create_text_message(sender_id=AGENT_A_ID, recipient_id=AGENT_B_ID, text="text")
         assert text_msg.type == MessageType.TEXT
 
         # ENCRYPTED
@@ -1084,8 +1081,13 @@ class TestEdgeCases:
             sender_id=AGENT_B_ID,
             recipient_id=AGENT_A_ID,
             action=ControlAction.HANDSHAKE_INIT,
-            data={"version": "SIP-1.0", "timestamp": 0, "identity_pub": "invalid", 
-                   "ephemeral_pub": "invalid", "nonce": "invalid"},
+            data={
+                "version": "SIP-1.0",
+                "timestamp": 0,
+                "identity_pub": "invalid",
+                "ephemeral_pub": "invalid",
+                "nonce": "invalid",
+            },
         )
         try:
             channel2.respond_to_handshake(msg)

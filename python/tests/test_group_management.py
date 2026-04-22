@@ -165,7 +165,9 @@ def test_group_chain_key_message():
     print(f"✅ 发送方: {msg['sender_id']}")
     print(f"✅ 接收方: {msg['recipient_id']}")
     print(f"✅ Sending chain key: {len(base64.b64decode(msg['sending_chain']['chain_key']))} bytes")
-    print(f"✅ Receiving chain key: {len(base64.b64decode(msg['receiving_chain']['chain_key']))} bytes")
+    print(
+        f"✅ Receiving chain key: {len(base64.b64decode(msg['receiving_chain']['chain_key']))} bytes"
+    )
     print("✅ 测试3通过!")
 
 

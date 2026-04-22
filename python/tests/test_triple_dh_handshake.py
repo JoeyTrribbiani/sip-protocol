@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """测试三重DH握手流程"""
+
 import sys
 import os
 import time
@@ -42,7 +43,9 @@ def test_triple_dh_handshake():
 
     # 验证双方派生的密钥一致
     print("验证密钥一致性：")
-    print(f"✅ 加密密钥一致：{session_keys_a['encryption_key'] == session_keys_b['encryption_key']}")
+    print(
+        f"✅ 加密密钥一致：{session_keys_a['encryption_key'] == session_keys_b['encryption_key']}"
+    )
     print(f"✅ 认证密钥一致：{session_keys_a['auth_key'] == session_keys_b['auth_key']}")
     print(f"✅ 防重放密钥一致：{session_keys_a['replay_key'] == session_keys_b['replay_key']}\n")
 

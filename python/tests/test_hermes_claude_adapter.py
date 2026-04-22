@@ -33,10 +33,7 @@ class TestHermesClaudeAdapter:
         assert adapter._claude_session_key is None
 
     @pytest.mark.skipif(
-        not any(
-            p in os.environ
-            for p in ["OPENCLAW_SESSION_KEY", "OPENCLAW_GATEWAY_URL"]
-        ),
+        not any(p in os.environ for p in ["OPENCLAW_SESSION_KEY", "OPENCLAW_GATEWAY_URL"]),
         reason="需要OpenClaw环境",
     )
     def test_is_in_openclaw(self):
@@ -102,10 +99,7 @@ class TestHermesClaudeAdapter:
         pytest.skip("需要完整的握手实现")
 
     @pytest.mark.skipif(
-        not any(
-            p in os.environ
-            for p in ["OPENCLAW_SESSION_KEY", "OPENCLAW_GATEWAY_URL"]
-        ),
+        not any(p in os.environ for p in ["OPENCLAW_SESSION_KEY", "OPENCLAW_GATEWAY_URL"]),
         reason="需要OpenClaw环境",
     )
     async def test_send_receive_roundtrip(self):
@@ -121,9 +115,7 @@ class TestHermesClaudeAdapter:
 
         # 由于这需要真实的OpenClaw环境，我们只测试加密部分
         # 不真正发送
-        encrypted_msg = adapter._channel.send(
-            "Test message", "claude-code"
-        )
+        encrypted_msg = adapter._channel.send("Test message", "claude-code")
 
         assert encrypted_msg.sender_id == "hermes"
         assert encrypted_msg.recipient_id == "claude-code"

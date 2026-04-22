@@ -3,6 +3,7 @@
 SIP协议端到端集成测试
 测试从握手到消息加密到Rekey到连接恢复的完整流程
 """
+
 import sys
 import os
 import time
@@ -68,9 +69,7 @@ def test_full_handshake_flow():
     print("✅ 测试1通过！")
 
     # 继续其他测试
-    _test_message_encryption_decryption(
-        agent_a_keys["encryption_key"], agent_a_keys["replay_key"]
-    )
+    _test_message_encryption_decryption(agent_a_keys["encryption_key"], agent_a_keys["replay_key"])
     _test_rekey_flow(session_state)
     _test_connection_resume(session_state)
 
@@ -81,9 +80,7 @@ def _test_message_encryption_decryption(encryption_key, replay_key):
 
     # Agent A发送消息
     plaintext = "Hello, Agent B! This is a secure message."
-    encrypted_msg = encrypt_message(
-        encryption_key, plaintext, "agent-a", "agent-b", 1, replay_key
-    )
+    encrypted_msg = encrypt_message(encryption_key, plaintext, "agent-a", "agent-b", 1, replay_key)
 
     print(f"✅ Agent A加密消息")
     print(f"   - Plaintext: {plaintext}")
@@ -167,15 +164,21 @@ def _test_connection_resume(session_state):
         session_id="agent-a",
         partner_id="agent-b",
         established_at=session_state["created_at"],
-        encryption_key=session_state["encryption_key"].hex()
-        if isinstance(session_state["encryption_key"], bytes)
-        else session_state["encryption_key"],
-        auth_key=session_state["auth_key"].hex()
-        if isinstance(session_state["auth_key"], bytes)
-        else session_state["auth_key"],
-        replay_key=session_state["replay_key"].hex()
-        if isinstance(session_state["replay_key"], bytes)
-        else session_state["replay_key"],
+        encryption_key=(
+            session_state["encryption_key"].hex()
+            if isinstance(session_state["encryption_key"], bytes)
+            else session_state["encryption_key"]
+        ),
+        auth_key=(
+            session_state["auth_key"].hex()
+            if isinstance(session_state["auth_key"], bytes)
+            else session_state["auth_key"]
+        ),
+        replay_key=(
+            session_state["replay_key"].hex()
+            if isinstance(session_state["replay_key"], bytes)
+            else session_state["replay_key"]
+        ),
         message_counter_send=0,
         message_counter_receive=0,
         last_rekey_sequence=0,
@@ -210,6 +213,7 @@ def _test_connection_resume(session_state):
 
     # 测试过期检查（创建一个过期的会话）
     from src.protocol.resume import SESSION_TTL
+
     expired_state = SessionResumeState(
         session_id="agent-a",
         partner_id="agent-b",

@@ -13,7 +13,7 @@ from src.protocol.version import (
     version_compare,
     is_backward_compatible,
     PROTOCOL_VERSIONS,
-    DEFAULT_VERSION
+    DEFAULT_VERSION,
 )
 from src.protocol.fragment import (
     FragmentBuffer,
@@ -21,7 +21,7 @@ from src.protocol.fragment import (
     fragment_message,
     reassemble_fragment,
     MAX_MESSAGE_SIZE,
-    MAX_PAYLOAD_SIZE
+    MAX_PAYLOAD_SIZE,
 )
 from src.protocol.resume import (
     SessionResumeState,
@@ -31,7 +31,7 @@ from src.protocol.resume import (
     verify_session_resume,
     create_session_resume_ack_message,
     is_session_expired,
-    validate_message_counter
+    validate_message_counter,
 )
 
 
@@ -106,7 +106,7 @@ class TestMessageFragmentation:
             "iv": "base64_iv",
             "payload": {"text": "Hello, world!"},
             "auth_tag": "base64_tag",
-            "replay_tag": "base64_replay"
+            "replay_tag": "base64_replay",
         }
 
         fragments = fragment_message(message, 1, "agent:test")
@@ -128,7 +128,7 @@ class TestMessageFragmentation:
             "iv": "base64_iv",
             "payload": {"text": large_text},
             "auth_tag": "base64_tag",
-            "replay_tag": "base64_replay"
+            "replay_tag": "base64_replay",
         }
 
         fragments = fragment_message(message, 1, "agent:test")
@@ -160,7 +160,7 @@ class TestMessageFragmentation:
             "iv": "base64_iv",
             "payload": {"text": large_text},
             "auth_tag": "base64_tag",
-            "replay_tag": "base64_replay"
+            "replay_tag": "base64_replay",
         }
 
         # 分片
@@ -188,7 +188,7 @@ class TestMessageFragmentation:
             fragment_index=1,
             fragment_total=2,
             fragment_size=100,
-            payload=b"test_data"
+            payload=b"test_data",
         )
 
         # 等待超时
@@ -229,7 +229,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         # 序列化
@@ -254,7 +254,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         message = create_session_resume_message(state, 101)
@@ -276,7 +276,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         # 创建消息
@@ -304,7 +304,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         message = create_session_resume_ack_message(state, 101)
@@ -328,7 +328,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         assert is_session_expired(state) is True
@@ -345,7 +345,7 @@ class TestSessionResume:
             message_counter_send=100,
             message_counter_receive=100,
             last_rekey_sequence=5,
-            rekey_key_derived=True
+            rekey_key_derived=True,
         )
 
         assert is_session_expired(state2) is False

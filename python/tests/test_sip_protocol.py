@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """SIP协议测试脚本"""
+
 import sys
 import os
 import time
@@ -66,9 +67,7 @@ def test_message_encryption():
     plaintext = "Hello, Agent B! This is a secure message."
 
     # 加密消息（需要sender_id, recipient_id, message_counter）
-    encrypted_msg = encrypt_message(
-        encryption_key, plaintext, "agent-a", "agent-b", 1
-    )
+    encrypted_msg = encrypt_message(encryption_key, plaintext, "agent-a", "agent-b", 1)
     nonce = base64.b64decode(encrypted_msg["iv"])
     ciphertext = base64.b64decode(encrypted_msg["payload"])
 
