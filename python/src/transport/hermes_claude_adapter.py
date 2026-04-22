@@ -32,7 +32,6 @@ Hermes ↔ Claude Code 加密通信适配器
     await adapter.close()
 """
 
-import asyncio
 import base64
 import json
 import os
