@@ -91,6 +91,7 @@ disable = [
     "R0801",  # duplicate-code
     "R0917",  # too-many-positional-arguments
     "R0902",  # too-many-instance-attributes
+    "R0401",  # cyclic-import（延迟导入是合理的架构选择）
 ]
 
 [tool.mypy]
