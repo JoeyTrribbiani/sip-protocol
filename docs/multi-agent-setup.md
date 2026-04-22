@@ -1,402 +1,330 @@
 # 多Agent加密通信配置指南
 
-> 本文档说明如何配置 Hermes + OpenClaw + Claude Code 三方加密通信环境，
-> 并使用SIP协议库实现端到端加密。
+> SIP协议库与Hermes/OpenClaw/Claude Code的集成配置
 
-## 架构概览
+## 架构
 
 ```
-┌─────────────┐     SIP加密      ┌─────────────┐     SIP加密      ┌─────────────┐
-│   Hermes    │ ◄──────────────► │  OpenClaw   │ ◄──────────────► │ Claude Code │
-│  (决策型)    │   hermes CLI    │  (调度型)    │  sessions_spawn  │  (执行型)    │
-│             │                  │  果果 (你)   │                  │             │
-│  glm-5.1    │                  │  GLM-5.1    │                  │  claude-sonnet │
-└─────────────┘                  └─────────────┘                  └─────────────┘
-      │                              │                              │
-      ▼                              ▼                              ▼
-  hermes CLI                   OpenClaw Gateway              claude CLI
-  (~/.hermes/)                (~/.openclaw/)               (npm全局安装)
+Hermes ──SIP加密──► OpenClaw Agent ──SIP加密──► Claude Code
+(glm-5.1)    hermes_claude_adapter    (GLM-5.1)    openclaw_adapter
+                  │                                     │
+                  ▼                                     ▼
+            sip_mcp_server                       sessions_spawn
+            (MCP工具)                            (ACP子agent)
 ```
 
-### 通信路径
+## 1. SIP MCP Server 配置
 
-| 路径 | 方式 | 加密 |
+### 1.1 注册为MCP Server
+
+在OpenClaw配置中注册SIP MCP Server：
+
+```json
+// ~/.openclaw/openclaw.json
+{
+  "mcp": {
+    "servers": {
+      "sip-protocol": {
+        "command": "python3",
+        "args": ["-m", "sip_protocol.transport.sip_mcp_server", "--psk", "<预共享密钥>", "--agent-id", "openclaw-agent"],
+        "cwd": "/path/to/sip-protocol/python"
+      }
+    }
+  }
+}
+```
+
+Hermes端同样配置：
+
+```json
+// ~/.hermes/hermes-agent/mcp_config.json
+{
+  "sip-protocol": {
+    "command": "python3",
+    "args": ["-m", "sip_protocol.transport.sip_mcp_server", "--psk", "<预共享密钥>", "--agent-id", "hermes"],
+    "cwd": "/path/to/sip-protocol/python"
+  }
+}
+```
+
+### 1.2 PSK密钥分发
+
+所有参与通信的Agent必须使用相同的PSK：
+
+```bash
+# 生成PSK
+python3 -c "import secrets; print(secrets.token_hex(32))"
+# 输出: a1b2c3d4...（64字符hex）
+
+# 各Agent配置相同的PSK
+# OpenClaw: openclaw.json 中 mcp.servers.sip-protocol.args
+# Hermes: mcp_config.json 中 args
+# Claude Code: 环境变量 SIP_PSK
+```
+
+### 1.3 MCP工具使用
+
+注册后，Agent可使用以下MCP工具：
+
+| 工具 | 用途 | 参数 |
 |------|------|------|
-| 果果 → Claude Code | `sessions_spawn` (ACP) | SIP端到端加密 |
-| 果果 → Hermes | `hermes chat` CLI | SIP端到端加密 |
-| Hermes → Claude Code | `hermes_spawn_claude_code` | SIP端到端加密 |
+| `sip_handshake` | 三重DH握手 | role, agent_id, message |
+| `sip_encrypt` | 加密消息 | plaintext, recipient_id |
+| `sip_decrypt` | 解密消息 | encrypted_message |
+| `sip_rekey` | 密钥轮换 | role, message |
 
-## 1. 环境要求
+## 2. OpenClaw 适配器配置
 
-### 基础环境
-
-| 组件 | 版本 | 安装方式 |
-|------|------|----------|
-| Python | 3.11+ | 系统安装 |
-| Node.js | 20+ | 系统安装 |
-| Git | 2.x | 系统安装 |
-
-### Agent组件
-
-| 组件 | 版本 | 安装方式 |
-|------|------|----------|
-| OpenClaw | 2026.4+ | `npm install -g openclaw` |
-| Hermes Agent | 0.8+ | `curl -fsSL https://hermes.agent/install \| bash` |
-| Claude Code | 2.x+ | `npm install -g @anthropic-ai/claude-code` |
-
-## 2. OpenClaw 配置
-
-### 基础配置 (`~/.openclaw/openclaw.json`)
-
-```json
-{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "zhipuglmcodingplanpro/GLM-5.1",
-        "fallbacks": ["zhipuglmcodingplanpro/GLM-4.7"]
-      },
-      "workspace": "~/.openclaw/workspace"
-    }
-  },
-  "plugins": {
-    "allow": [
-      "openclaw-weixin",
-      "zai",
-      "memory-core",
-      "hermes-mcp",
-      "acpx",
-      "zhipu-mcp"
-    ]
-  }
-}
-```
-
-### 模型配置
-
-OpenClaw使用 `openclaw.json` 中的 `agents.defaults.model` 配置模型：
-
-```json
-{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "zhipuglmcodingplanpro/GLM-5.1"
-      }
-    }
-  }
-}
-```
-
-也可以通过API Key配置自定义模型提供商：
-
-```json
-{
-  "models": {
-    "providers": {
-      "glm-5.1": {
-        "api": "openai-completions",
-        "apiKey": "your-api-key",
-        "baseUrl": "https://open.bigmodel.cn/api/paas/v4"
-      }
-    }
-  }
-}
-```
-
-### 验证配置
-
-```bash
-# 检查OpenClaw状态
-openclaw status
-
-# 检查Gateway是否运行
-openclaw gateway status
-```
-
-## 3. Hermes 配置
-
-### 基础设置
-
-```bash
-# 安装后初始化
-hermes setup
-
-# 配置模型（推荐glm-5.1）
-hermes model
-
-# 检查状态
-hermes status
-```
-
-### 模型配置
-
-Hermes使用 `.env` 文件配置API Key：
-
-```bash
-# ~/.hermes/hermes-agent/.env
-ZAI_API_KEY=your-zhipu-api-key
-```
-
-切换模型：
-```bash
-hermes model  # 交互式选择
-```
-
-推荐使用 glm-5.1（glm-4.7会返回空响应）。
-
-### Claude Code集成
-
-Hermes通过skills目录下的`autonomous-ai-agents/claude-code`技能调用Claude Code：
-
-```bash
-# 安装Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# 登录认证
-claude auth login
-
-# 验证
-claude auth status
-```
-
-Hermes调用Claude Code有两种模式：
-- **Print模式** (`-p`): 一次性任务，不需要PTY
-- **交互式PTY模式**: 通过tmux进行多轮对话
-
-### 验证配置
-
-```bash
-# 测试Hermes基本功能
-hermes chat -q "回复OK"
-
-# 测试Claude Code集成
-hermes chat -q "用claude-code回复OK"
-```
-
-## 4. SIP协议库配置
-
-### 安装
+### 2.1 安装SIP协议库
 
 ```bash
 cd sip-protocol/python
-pip install -r requirements.txt
 pip install -e .
 ```
 
-### 在Agent中使用
+### 2.2 在Agent代码中使用
 
-#### 果果（OpenClaw主Agent）使用SIP
+OpenClaw Agent通过 `OpenClawAdapter` 发送加密消息：
 
 ```python
-from src.transport import EncryptedChannel, ChannelConfig
+from sip_protocol.transport import OpenClawAdapter
 
-# 创建加密通道
-channel = EncryptedChannel(
-    agent_id="guoguo",
-    psk=b"shared-secret-key",
-    config=ChannelConfig(
-        rekey_after_messages=10000,
-        rekey_after_seconds=3600,
-    ),
+adapter = OpenClawAdapter(agent_id="openclaw-agent")
+await adapter.connect()
+
+# 加密发送消息给Hermes
+await adapter.gateway_send_message(
+    target="hermes",
+    message="需要加密传输的内容",
 )
 
-# 发起握手（Triple DH）
-hello_msg = channel.initiate()
-# 将hello_msg通过sessions_send发送给对方
-
-# 加密发送
-encrypted = channel.send("机密消息", "claude-code")
-# 通过sessions_send发送encrypted.to_json()
-
-# 接收解密
-received = channel.receive(agent_message)
-print(received)  # 解密后的明文
+# 接收并解密Hermes的回复
+messages = await adapter.gateway_read_messages()
 ```
 
-#### Hermes使用SIP（通过MCP Server）
-
-```bash
-# 启动SIP MCP Server
-python -m sip_protocol.transport.sip_mcp_server --psk "shared-secret-key" --agent-id hermes
-```
-
-MCP工具列表：
-- `sip_handshake`: 三重DH握手
-- `sip_encrypt`: 加密消息
-- `sip_decrypt`: 解密消息
-- `sip_rekey`: 密钥轮换
-
-## 5. 三方加密通信测试
-
-### 测试1: 果果 → Claude Code（明文）
-
-这是最基本的通信测试，通过OpenClaw的sessions_spawn：
-
-```bash
-# 在OpenClaw聊天中
-# 果果直接发送消息给Claude Code子agent
-# 通过sessions_spawn启动，sessions_send发送消息
-```
-
-验证：Claude Code应能正常回复。
-
-### 测试2: 果果 → Hermes（通过CLI）
-
-```bash
-# 通过hermes CLI发送消息
-hermes chat -q "测试消息：回复OK确认收到"
-```
-
-验证：Hermes应回复"OK"或类似确认。
-
-### 测试3: SIP加密通信（果果 ↔ Hermes）
-
-使用SIP协议库实现端到端加密：
+### 2.3 发送给Claude Code
 
 ```python
-# 果果端
-from src.transport import EncryptedChannel
+from sip_protocol.transport import HermesClaudeAdapter
 
-channel_a = EncryptedChannel(agent_id="guoguo", psk=b"test-key")
-hello = channel_a.initiate()
+adapter = HermesClaudeAdapter(
+    hermes_agent_id="openclaw-agent",
+    claude_agent_id="claude-code",
+    psk=psk_bytes,
+)
 
-# 将hello发送给Hermes（通过hermes CLI或MCP）
-# Hermes端处理hello，返回auth
-# channel_a.complete_handshake(auth_msg)
-
-# 加密通信
-encrypted = channel_a.send("加密测试消息", "hermes")
+await adapter.handshake()
+response = await adapter.send("加密任务消息")
 ```
 
-### 测试4: 三方加密通信
+## 3. Hermes 适配器配置
 
-完整的A→B→C加密通信流程：
+### 3.1 通过MCP调用
+
+Hermes注册SIP MCP Server后，可直接在对话中使用：
 
 ```
-1. 果果发起SIP握手 → Hermes
-2. Hermes响应握手 → 果果
-3. 果果发起SIP握手 → Claude Code（通过sessions_spawn）
-4. Claude Code响应握手 → 果果
-5. 三方建立加密通道
-6. 果果通过SIP加密发送消息给Hermes和Claude Code
+# Hermes对话中
+> sip_handshake role=initiator agent_id=hermes
+← hello_message: "base64编码的握手消息..."
+
+# 将hello_message发送给对方Agent
+> sip_encrypt plaintext="机密消息" recipient_id="openclaw-agent"
+← encrypted_message: "base64编码的加密消息..."
 ```
 
-## 6. 集体决策测试
+### 3.2 通过Hermes技能集成
 
-使用DecisionEngine进行多Agent投票：
+创建自定义技能调用SIP：
+
+```yaml
+# ~/.hermes/hermes-agent/skills/sip-encrypt/SKILL.md
+---
+name: sip-encrypt
+description: 使用SIP协议加密发送消息给其他Agent
+---
+
+通过MCP工具 sip_encrypt 和 sip_decrypt 进行加密通信。
+
+步骤：
+1. 调用 sip_handshake 建立加密通道
+2. 调用 sip_encrypt 加密消息
+3. 通过terminal/hermes工具发送加密消息
+4. 对方调用 sip_decrypt 解密
+```
+
+## 4. Claude Code 适配器配置
+
+### 4.1 作为MCP Server运行
+
+Claude Code通过MCP Server接收SIP加密消息：
+
+```json
+// Claude Code项目配置 .claude/settings.json
+{
+  "mcpServers": {
+    "sip-protocol": {
+      "command": "python3",
+      "args": ["-m", "sip_protocol.transport.sip_mcp_server",
+               "--psk", "<预共享密钥>",
+               "--agent-id", "claude-code"],
+      "cwd": "/path/to/sip-protocol/python"
+    }
+  }
+}
+```
+
+### 4.2 作为子Agent运行
+
+通过OpenClaw的`sessions_spawn`启动Claude Code时，注入SIP配置：
 
 ```python
-from src.protocol.decision import DecisionEngine
+from sip_protocol.transport import HermesClaudeAdapter
 
-engine = DecisionEngine(agent_id="guoguo")
+adapter = HermesClaudeAdapter(
+    hermes_agent_id="openclaw-agent",
+    claude_agent_id="claude-code",
+    psk=psk_bytes,
+    model="claude-sonnet",
+)
 
-# 创建提案
+# 自动启动Claude Code子会话并建立SIP加密通道
+response = await adapter.send("加密任务描述")
+```
+
+## 5. 三方通信流程
+
+### 5.1 建立加密通道
+
+```
+Step 1: OpenClaw Agent ↔ Hermes
+  OpenClaw: sip_handshake(role=initiator) → hello_msg
+  → 通过hermes CLI发送hello_msg给Hermes
+  Hermes: sip_handshake(role=responder, message=hello_msg) → auth_msg
+  → 返回auth_msg
+  OpenClaw: sip_handshake(role=complete, message=auth_msg)
+  ✅ 通道建立
+
+Step 2: OpenClaw Agent ↔ Claude Code
+  同上流程，通过sessions_spawn传递握手消息
+  ✅ 通道建立
+```
+
+### 5.2 加密通信
+
+```
+OpenClaw → Hermes:
+  1. sip_encrypt(plaintext="评审请求", recipient_id="hermes")
+  2. 通过hermes CLI发送加密消息
+  3. Hermes: sip_decrypt(encrypted_message)
+
+OpenClaw → Claude Code:
+  1. sip_encrypt(plaintext="编码任务", recipient_id="claude-code")
+  2. 通过sessions_send发送加密消息
+  3. Claude Code: sip_decrypt(encrypted_message)
+```
+
+### 5.3 密钥轮换
+
+```
+任一方发起:
+  sip_rekey(role=initiator) → rekey_request
+  → 发送给对方
+  对方: sip_rekey(role=responder, message=rekey_request)
+  ✅ 密钥已轮换
+```
+
+## 6. 集体决策配置
+
+三方参与投票决策：
+
+```python
+from sip_protocol.protocol.decision import DecisionEngine
+
+# 任一方创建提案
+engine = DecisionEngine(agent_id="openclaw-agent")
 proposal = engine.create_proposal(
-    title="选择加密算法",
+    title="部署方案选择",
     config={
-        "voters": ["guoguo", "hermes", "claude-code"],
-        "options": ["XChaCha20-Poly1305", "AES-256-GCM", "ChaCha20-Poly1305"],
+        "voters": ["openclaw-agent", "hermes", "claude-code"],
+        "options": ["蓝绿部署", "滚动更新", "金丝雀发布"],
         "strategy": "majority",
         "quorum": 3,
     },
 )
 
-# 果果投票
-engine.vote(proposal.proposal_id, "XChaCha20-Poly1305")
-
-# 导出提案给其他Agent
+# 导出提案（通过SIP加密发送给其他Agent）
 exported = engine.export_proposal(proposal.proposal_id)
-# 通过sessions_send发送给Claude Code处理
+
+# 其他Agent导入并投票
+engine_b = DecisionEngine(agent_id="hermes")
+engine_b.import_proposal(exported)
+engine_b.vote(proposal.proposal_id, "滚动更新", reason="风险最低")
+
+# 汇总投票后评估
+result = engine.evaluate(proposal.proposal_id)
 ```
 
-## 7. 消息持久化
-
-使用MessageStore保存通信历史：
+## 7. 消息持久化配置
 
 ```python
-from src.protocol.persistence import MessageStore
+from sip_protocol.protocol.persistence import MessageStore
 
-# 创建持久化存储
-store = MessageStore(db_path="sip_messages.db")
+# 文件数据库（推荐）
+store = MessageStore(db_path="~/.openclaw/sip_messages.db")
 
-# 保存消息
+# 保存加密消息
 store.save({
-    "id": "msg-001",
+    "id": msg.id,
     "sender_id": "hermes",
-    "recipient_id": "guoguo",
-    "payload": "加密通信内容",
+    "recipient_id": "openclaw-agent",
+    "payload": msg.to_json(),
     "encrypted": True,
-    "timestamp": time.time(),
+    "session_id": "three-party-chat",
 })
 
-# 查询历史
-messages = store.query(filters={"sender": "hermes"}, limit=20)
+# 按会话查询历史
+messages = store.query(filters={"session_id": "three-party-chat"}, limit=50)
 ```
 
-## 8. 离线消息队列
-
-Agent离线时缓存消息：
+## 8. 离线消息配置
 
 ```python
-from src.protocol.offline_queue import OfflineQueue
+from sip_protocol.protocol.offline_queue import OfflineQueue
 
-queue = OfflineQueue(agent_id="claude-code")
+# Agent离线时缓存消息
+queue = OfflineQueue(
+    agent_id="claude-code",
+    db_path="~/.openclaw/sip_offline.db",
+    default_ttl=86400,  # 24小时
+)
 
-# 其他Agent发送消息给离线的claude-code
-queue.enqueue("hermes", "claude-code", {"payload": "离线消息"})
+# 发送方入队
+queue.enqueue("hermes", "claude-code", {"payload": "紧急任务"})
 
-# claude-code上线后投递
+# Agent上线后投递
 messages = queue.deliver_pending()
 for msg in messages:
-    process(msg)
+    handle(msg)
     queue.ack(msg["id"])
 ```
 
 ## 9. 故障排除
 
-### Hermes不回复
-
-```bash
-# 检查API Key
-hermes status
-
-# 检查模型配置
-hermes model
-
-# 检查glm-5.1是否限流（HTTP 429）
-hermes chat -q "OK" 2>&1 | grep 429
-```
-
-### Claude Code卡住
-
-Claude Code CLI约有75%概率卡住，解决方案：
-- 使用 `-p` (print模式) 替代交互模式
-- 设置超时（`timeout`参数）
-- 通过subagent模式（`sessions_spawn`）运行
-
-### OpenClaw Gateway未运行
-
-```bash
-openclaw gateway status
-openclaw gateway start
-```
-
-### SIP加密通信失败
-
-```bash
-# 运行SIP协议测试
-cd sip-protocol/python
-python3 -m pytest tests/test_sip_protocol.py -v
-
-# 运行集成测试
-python3 -m pytest tests/test_integration.py -v
-```
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| MCP Server无法启动 | Python路径或PSK错误 | 检查command和args |
+| 握手失败 | PSK不一致 | 确认所有Agent使用相同PSK |
+| 加密解密失败 | 通道未建立 | 先执行sip_handshake |
+| Hermes返回空 | glm-4.7模型问题 | 切换到glm-5.1 |
+| Claude Code卡住 | CLI交互模式问题 | 使用print模式(-p)或subagent |
+| MyPy类型错误 | Python 3.14本地环境 | CI/CD使用3.11验证 |
 
 ## 10. 安全注意事项
 
-1. **PSK管理**: 预共享密钥应通过安全渠道分发，不要硬编码
-2. **API Key保护**: 所有API Key存储在本地配置文件，不要提交到Git
-3. **加密消息转发**: 即使消息通过OpenClaw中转，内容也是SIP加密的
-4. **Rekey轮换**: 建议每10000条消息或每1小时轮换一次密钥
-5. **离线队列**: 过期消息默认30天清理，敏感消息应设置更短TTL
+1. **PSK通过环境变量分发**，不要硬编码在配置文件中
+2. **定期轮换PSK**（建议每月一次）
+3. **启用Rekey**（每10000条消息自动轮换密钥）
+4. **离线队列TTL**不宜过长（默认24小时）
+5. **消息持久化数据库**设置文件权限为600
+6. **API Key**存储在本地，不提交到Git
