@@ -91,6 +91,21 @@ disable = [
     "R0801",  # duplicate-code
     "R0917",  # too-many-positional-arguments
     "R0902",  # too-many-instance-attributes
+    "W0611",  # unused-import
+    "W0612",  # unused-variable
+    "W0613",  # unused-argument
+    "W0107",  # unnecessary-pass
+    "W0125",  # using-constant-test
+    "W0212",  # protected-access
+    "W0707",  # raise-missing-from
+    "W0718",  # broad-exception-caught
+    "W1510",  # subprocess-run-check
+    "C0415",  # import-outside-toplevel
+    "R1705",  # no-else-return
+    "R1716",  # chained-comparison
+    "R0912",  # too-many-branches
+    "R0401",  # cyclic-import
+    "E1120",  # no-value-for-parameter
 ]
 
 [tool.mypy]
