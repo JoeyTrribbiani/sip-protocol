@@ -232,7 +232,7 @@
 | | Transport层 (OpenClaw适配器) | ✅ 完成 | python/src/transport/openclaw_adapter.py |
 | | OpenClaw桥接 (真正调用API) | ❌ 未实现 | 需要调用Gateway API |
 | | MCP Server封装 | ❌ 未实现 | 让agent通过MCP调用SIP |
-| | 集体决策机制 | ❌ 未实现 | |
+| | 集体决策机制 | ✅ 完成 | python/src/protocol/decision.py |
 | | 消息持久化 | ❌ 未实现 | |
 | | 离线消息队列 | ❌ 未实现 | |
 | | 文件/图片/视频传输 | ❌ 未实现 | |
