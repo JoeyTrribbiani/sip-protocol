@@ -90,6 +90,7 @@ disable = [
     "W0201",  # attribute-defined-outside-init
     "R0801",  # duplicate-code
     "R0917",  # too-many-positional-arguments
+    "R0902",  # too-many-instance-attributes
 ]
 
 [tool.mypy]
