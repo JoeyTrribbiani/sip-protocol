@@ -73,10 +73,7 @@ class Proposal:
         title: str,
         options: List[str],
         voters: List[str],
-        deadline: float,
-        strategy: str,
-        quorum: int,
-        metadata: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """初始化提案
 
@@ -86,22 +83,19 @@ class Proposal:
             title: 标题
             options: 投票选项
             voters: 投票者列表
-            deadline: 截止时间戳
-            strategy: 决策策略
-            quorum: 法定人数
-            metadata: 可选元数据（description, weights等）
+            config: 配置（deadline, strategy, quorum, description, weights）
         """
-        meta = metadata or {}
+        cfg = config or {}
         self.proposal_id = proposal_id
         self.initiator = initiator
         self.title = title
-        self.description = meta.get("description", "")
+        self.description = cfg.get("description", "")
         self.options = options
         self.voters = voters
-        self.deadline = deadline
-        self.strategy = strategy
-        self.quorum = quorum
-        self.weights = meta.get("weights") or {}
+        self.deadline = cfg.get("deadline", time.time() + 3600)
+        self.strategy = cfg.get("strategy", "majority")
+        self.quorum = cfg.get("quorum", 2)
+        self.weights = cfg.get("weights") or {}
         self.status = ProposalStatus.PENDING
         self.created_at = time.time()
         self.votes: List["Vote"] = []
@@ -133,10 +127,10 @@ class Proposal:
             title=data["title"],
             options=data["options"],
             voters=data["voters"],
-            deadline=data["deadline"],
-            strategy=data["strategy"],
-            quorum=data["quorum"],
-            metadata={
+            config={
+                "deadline": data["deadline"],
+                "strategy": data["strategy"],
+                "quorum": data["quorum"],
                 "description": data.get("description", ""),
                 "weights": data.get("weights"),
             },
@@ -307,10 +301,13 @@ class DecisionEngine:
             title=title,
             options=options,
             voters=voters,
-            deadline=deadline,
-            strategy=strategy,
-            quorum=quorum,
-            metadata={"description": description, "weights": weights},
+            config={
+                "deadline": deadline,
+                "strategy": strategy,
+                "quorum": quorum,
+                "description": description,
+                "weights": weights,
+            },
         )
 
         self._proposals[proposal_id] = proposal

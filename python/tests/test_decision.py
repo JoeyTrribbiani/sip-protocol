@@ -29,9 +29,7 @@ class TestProposal:
             title="测试提案",
             options=["同意", "反对", "弃权"],
             voters=["agent-a", "agent-b", "agent-c"],
-            deadline=time.time() + 3600,
-            strategy="majority",
-            quorum=2,
+            config={"deadline": time.time() + 3600, "strategy": "majority", "quorum": 2},
         )
         data = proposal.to_dict()
 
