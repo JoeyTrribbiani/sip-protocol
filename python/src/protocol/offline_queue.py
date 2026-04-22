@@ -103,7 +103,7 @@ class OfflineQueue:
         Returns:
             消息ID
         """
-        message_id = message.get("id", f"off-{int(time.time()*1000)}")
+        message_id: str = str(message.get("id", f"off-{int(time.time()*1000)}"))
         expires_at = time.time() + (ttl if ttl is not None else self._default_ttl)
 
         self._conn.execute(
