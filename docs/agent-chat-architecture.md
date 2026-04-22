@@ -213,7 +213,7 @@
 |------|------|------|------|
 | **Phase 1** | Agent A ↔ Agent B MCP双向 | ✅ 完成 | Hermes ↔ OpenClaw |
 | | Agent B → Agent C ACP调用 | ✅ 完成 | OpenClaw → Claude Code |
-| | Agent A → Agent C 适配器 | 🟡 待实现 | Hermes → Claude Code |
+| | Agent A → Agent C 适配器 | ✅ 完成 | Hermes → Claude Code (SIP加密) |
 | | 多Agent循环测试 | 🟡 待完成 | |
 | **Phase 2** | SIP加密协议设计 | ✅ 完成 | docs/e2ee-protocol.md |
 | | 三重DH密钥交换 | ✅ 完成 | python/src/protocol/handshake.py |
