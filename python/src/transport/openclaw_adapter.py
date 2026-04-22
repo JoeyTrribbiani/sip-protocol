@@ -443,7 +443,7 @@ class OpenClawAdapter:
         path: str,
         attempt: int,
         max_retries: int,
-        retry_delay: float,
+        _retry_delay: float,
     ) -> Dict[str, Any]:
         """处理Gateway响应"""
         if response.status == 200:

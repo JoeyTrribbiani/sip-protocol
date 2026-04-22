@@ -9,7 +9,7 @@
 4. 类型安全：使用Protocol和类型注解
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod  # pylint: disable=cyclic-import
 from enum import Enum
 from typing import Any, Callable, Dict, Optional
 from dataclasses import dataclass

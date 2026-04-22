@@ -280,7 +280,9 @@ class WebSocketAdapter(TransportAdapter):
             if not self._should_reconnect:
                 break
 
-            if max_retries >= 0 and self._reconnect_count >= max_retries:
+            if (
+                max_retries >= 0 and self._reconnect_count >= max_retries
+            ):  # pylint: disable=chained-comparison
                 break
 
             self._reconnect_count += 1

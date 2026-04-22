@@ -539,8 +539,6 @@ class SipMcpServer:
                     }
                 ],
             }
-        except JSONRPCError:
-            raise
         except (ValueError, RuntimeError, OSError) as e:
             raise JSONRPCError(
                 SIP_REKEY_FAILED,
@@ -606,8 +604,6 @@ class SipMcpServer:
                     }
                 ],
             }
-        except JSONRPCError:
-            raise
         except (ValueError, RuntimeError, OSError, KeyError) as e:
             raise JSONRPCError(
                 SIP_REKEY_FAILED,
