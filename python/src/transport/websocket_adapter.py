@@ -411,7 +411,9 @@ class WebSocketAdapter(TransportAdapter):
 
             bytes_received = len(message.to_json().encode("utf-8"))
             self._stats["messages_received"] = int(self._stats.get("messages_received", 0)) + 1
-            self._stats["bytes_received"] = int(self._stats.get("bytes_received", 0)) + bytes_received
+            self._stats["bytes_received"] = (
+                int(self._stats.get("bytes_received", 0)) + bytes_received
+            )
 
             return ReceiveResult(
                 success=True,
