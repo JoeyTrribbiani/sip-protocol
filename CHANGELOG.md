@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 会话列表查询
   - 14个测试全部通过
 
+#### 离线消息队列
+- **OfflineQueue**（src/protocol/offline_queue.py）
+  - Agent离线时缓存消息，上线后按优先级投递
+  - 投递确认/拒绝重入队机制
+  - 消息过期清理
+  - 最大重试次数（默认3次）
+  - 队列状态查询
+  - 11个测试全部通过
+
 ## [1.2.0] - 2026-04-22
 
 ### 新增
