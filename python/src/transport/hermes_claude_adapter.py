@@ -218,7 +218,7 @@ class HermesClaudeAdapter:
 
         # 解析响应
         try:
-            return json.loads(result.stdout)
+            return dict(json.loads(result.stdout))  # type: ignore[arg-type]
         except json.JSONDecodeError:
             # 如果不是JSON，返回原始文本
             return {"text": result.stdout}
@@ -234,7 +234,7 @@ class HermesClaudeAdapter:
             解密后的明文
         """
         # 检查响应是否是加密的
-        response_text = response.get("text", "")
+        response_text: str = response.get("text", "")  # type: ignore[assignment]
         if not response_text.startswith("ENCRYPTED:"):
             # 如果不是加密的，直接返回
             return response_text
