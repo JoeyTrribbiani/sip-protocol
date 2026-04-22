@@ -90,15 +90,6 @@ disable = [
     "W0201",  # attribute-defined-outside-init
     "R0801",  # duplicate-code
     "R0917",  # too-many-positional-arguments
-    "W0611",  # unused-import
-    "W0612",  # unused-variable
-    "W0613",  # unused-argument
-    "W0107",  # unnecessary-pass
-    "W1510",  # subprocess-run-check
-    "W0707",  # raise-missing-from
-    "W0718",  # broad-exception-caught
-    "R1705",  # no-else-return
-    "R0902",  # too-many-instance-attributes
 ]
 
 [tool.mypy]

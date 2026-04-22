@@ -16,22 +16,14 @@ OpenClaw适配器模块
 """
 
 import json
-import os
 import subprocess
-import asyncio
 import time
-import shutil
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .message import (
     AgentMessage,
     MessageType,
-    ControlAction,
-    create_text_message,
-    create_control_message,
-    create_encrypted_message,
-    parse_raw_message,
 )
 from .encrypted_channel import EncryptedChannel, ChannelState, ChannelConfig
 
@@ -153,13 +145,12 @@ class OpenClawAdapter:
 
     # ──────────────── 通道回调 ────────────────
 
-    def _on_channel_error(self, error: Exception) -> None:
+    def _on_channel_error(self, _error: Exception) -> None:
         """通道错误回调"""
         self._stats["errors"] += 1
 
     def _on_channel_state_change(self, old_state: ChannelState, new_state: ChannelState) -> None:
         """通道状态变更回调"""
-        pass  # 可扩展用于日志/监控
 
     # ──────────────── 生命周期 ────────────────
 
@@ -268,12 +259,13 @@ class OpenClawAdapter:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                check=True,
             )
             return result.returncode, result.stdout, result.stderr
-        except FileNotFoundError:
-            raise RuntimeError(f"OpenClaw CLI未找到: {self.config.openclaw_path}")
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"OpenClaw命令超时: {' '.join(args)}")
+        except FileNotFoundError as e:
+            raise RuntimeError(f"OpenClaw CLI未找到: {self.config.openclaw_path}") from e
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"OpenClaw命令超时: {' '.join(args)}") from e
 
     def spawn_session(
         self,
@@ -320,14 +312,13 @@ class OpenClawAdapter:
                 self._sessions[session_label] = result
                 self._stats["sessions_spawned"] += 1
                 return result
-            else:
-                return SpawnResult(
-                    session_id="",
-                    label=session_label,
-                    success=False,
-                    error=stderr.strip() or stdout.strip(),
-                )
-        except Exception as e:
+            return SpawnResult(
+                session_id="",
+                label=session_label,
+                success=False,
+                error=stderr.strip() or stdout.strip(),
+            )
+        except RuntimeError as e:
             return SpawnResult(
                 session_id="",
                 label=session_label,
@@ -369,9 +360,9 @@ class OpenClawAdapter:
         ]
 
         try:
-            returncode, stdout, stderr = self._run_openclaw(args)
+            returncode, _stdout, _stderr = self._run_openclaw(args)
             return returncode == 0
-        except Exception:
+        except RuntimeError:
             return False
 
     # ──────────────── Agent注册 ────────────────
@@ -438,8 +429,7 @@ class OpenClawAdapter:
             forwarded.metadata["forwarded_by"] = self.agent_id
             forwarded.metadata["hop_count"] = msg.hop_count
             return forwarded
-        else:
-            # 非加密消息直接包装转发
-            msg.increment_hop()
-            text = msg.payload.get("text", json.dumps(msg.payload))
-            return self._channel.send(text, next_recipient_id)
+        # 非加密消息直接包装转发
+        msg.increment_hop()
+        text = msg.payload.get("text", json.dumps(msg.payload))
+        return self._channel.send(text, next_recipient_id)

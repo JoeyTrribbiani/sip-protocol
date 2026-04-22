@@ -19,14 +19,10 @@
     msg = await channel.receive()
 """
 
-import os
 import time
-import json
-import hmac
-import hashlib
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Optional
+from dataclasses import dataclass
 
 from ..protocol.handshake import (
     initiate_handshake,
@@ -36,21 +32,16 @@ from ..protocol.handshake import (
 from ..protocol.message import (
     encrypt_message,
     decrypt_message,
-    generate_replay_tag,
     verify_replay_tag,
 )
 from ..protocol.rekey import RekeyManager
 from ..managers.session import SessionState
 from ..managers.nonce import NonceManager
-from ..crypto.dh import generate_keypair, dh_exchange
-from ..crypto.argon2 import hash_psk
-from ..crypto.hkdf import derive_keys_triple_dh
 
 from .message import (
     AgentMessage,
     MessageType,
     ControlAction,
-    create_text_message,
     create_control_message,
     create_encrypted_message,
 )
@@ -278,7 +269,7 @@ class EncryptedChannel:
 
         try:
             handshake_auth = auth_msg.payload.get("data", auth_msg.payload)
-            session_keys, session_state = complete_handshake(handshake_auth, self._handshake_state)
+            session_keys, _ = complete_handshake(handshake_auth, self._handshake_state)
             self._session_keys = session_keys
             self._session_state = SessionState()
             self._session_state.agent_id = self.agent_id
@@ -425,14 +416,13 @@ class EncryptedChannel:
         action = msg.payload.get("action", "")
         if action == ControlAction.HEARTBEAT.value:
             return "[heartbeat]"
-        elif action == ControlAction.DISCONNECT.value:
+        if action == ControlAction.DISCONNECT.value:
             self.close()
             return "[disconnect]"
-        elif action == ControlAction.ERROR.value:
+        if action == ControlAction.ERROR.value:
             error_msg = msg.payload.get("data", {}).get("message", "unknown error")
             return f"[error: {error_msg}]"
-        else:
-            return f"[control: {action}]"
+        return f"[control: {action}]"
 
     # ──────────────── 密钥轮换 ────────────────
 
@@ -454,20 +444,15 @@ class EncryptedChannel:
     def _initiate_rekey(self) -> None:
         """发起密钥轮换"""
         self._set_state(ChannelState.REKEYING)
-        try:
-            session_state_dict = {
-                "encryption_key": self._session_keys["encryption_key"],
-                "auth_key": self._session_keys["auth_key"],
-                "replay_key": self._session_keys["replay_key"],
-            }
-            manager = RekeyManager(session_state_dict, is_initiator=True)
-            rekey_request = manager.create_rekey_request()
-            self._handshake_state = {"rekey_manager": manager}
-            self._stats["last_rekey_at"] = time.time()
-        except Exception as e:
-            self._set_state(ChannelState.ERROR)
-            self._stats["errors"] += 1
-            raise
+        session_state_dict = {
+            "encryption_key": self._session_keys["encryption_key"],
+            "auth_key": self._session_keys["auth_key"],
+            "replay_key": self._session_keys["replay_key"],
+        }
+        manager = RekeyManager(session_state_dict, is_initiator=True)
+        manager.create_rekey_request()
+        self._handshake_state = {"rekey_manager": manager}
+        self._stats["last_rekey_at"] = time.time()
 
     # ──────────────── 通道控制 ────────────────
 
