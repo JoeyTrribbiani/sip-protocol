@@ -104,7 +104,7 @@ class MessageStore:
             ),
         )
         self._conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
     def get(self, message_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -204,7 +204,7 @@ class MessageStore:
 
         where = " AND ".join(conditions) if conditions else "1=1"
         row = self._conn.execute(f"SELECT COUNT(*) FROM messages WHERE {where}", params).fetchone()
-        return row[0]
+        return int(row[0])  # type: ignore[arg-type]
 
     def delete(self, message_id: str) -> bool:
         """
