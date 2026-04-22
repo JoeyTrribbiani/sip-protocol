@@ -368,8 +368,8 @@ class WebSocketAdapter(TransportAdapter):
                 timeout=send_timeout,
             )
 
-            self._stats["messages_sent"] = int(self._stats.get("messages_sent", 0)) + 1
-            self._stats["bytes_sent"] = int(self._stats.get("bytes_sent", 0)) + bytes_sent
+            self._stats["messages_sent"] = (self._stats.get("messages_sent") or 0) + 1
+            self._stats["bytes_sent"] = (self._stats.get("bytes_sent") or 0) + bytes_sent
 
             return SendResult(
                 success=True,
@@ -410,10 +410,10 @@ class WebSocketAdapter(TransportAdapter):
                 )
 
             bytes_received = len(message.to_json().encode("utf-8"))
-            self._stats["messages_received"] = int(self._stats.get("messages_received", 0)) + 1
+            self._stats["messages_received"] = (self._stats.get("messages_received") or 0) + 1
             self._stats["bytes_received"] = (
-                int(self._stats.get("bytes_received", 0)) + bytes_received
-            )
+                self._stats.get("bytes_received") or 0
+            ) + bytes_received
 
             return ReceiveResult(
                 success=True,
