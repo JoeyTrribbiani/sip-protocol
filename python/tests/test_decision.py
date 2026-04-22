@@ -106,7 +106,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b", "agent-c"],
+            config={"voters": ["agent-a", "agent-b", "agent-c"]},
         )
 
         assert proposal.initiator == "agent-a"
@@ -120,7 +120,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
 
         vote = engine.vote(proposal.proposal_id, "同意", reason="测试")
@@ -134,7 +134,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -149,7 +149,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a"],
+            config={"voters": ["agent-a"]},
         )
 
         import pytest
@@ -162,7 +162,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-x")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
 
         import pytest
@@ -175,9 +175,11 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b", "agent-c"],
-            strategy="majority",
-            quorum=2,
+            config={
+                "voters": ["agent-a", "agent-b", "agent-c"],
+                "strategy": "majority",
+                "quorum": 2,
+            },
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -206,9 +208,11 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b", "agent-c"],
-            strategy="majority",
-            quorum=2,
+            config={
+                "voters": ["agent-a", "agent-b", "agent-c"],
+                "strategy": "majority",
+                "quorum": 2,
+            },
         )
 
         engine.vote(proposal.proposal_id, "反对")
@@ -235,8 +239,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b", "agent-c"],
-            quorum=3,
+            config={"voters": ["agent-a", "agent-b", "agent-c"], "quorum": 3},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -250,9 +253,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
-            strategy="unanimous",
-            quorum=2,
+            config={"voters": ["agent-a", "agent-b"], "strategy": "unanimous", "quorum": 2},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -278,9 +279,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
-            strategy="unanimous",
-            quorum=2,
+            config={"voters": ["agent-a", "agent-b"], "strategy": "unanimous", "quorum": 2},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -306,9 +305,11 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b", "agent-c"],
-            strategy="super_majority",
-            quorum=3,
+            config={
+                "voters": ["agent-a", "agent-b", "agent-c"],
+                "strategy": "super_majority",
+                "quorum": 3,
+            },
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -345,10 +346,12 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
-            strategy="weighted",
-            quorum=2,
-            weights={"agent-a": 3.0, "agent-b": 1.0},
+            config={
+                "voters": ["agent-a", "agent-b"],
+                "strategy": "weighted",
+                "quorum": 2,
+                "weights": {"agent-a": 3.0, "agent-b": 1.0},
+            },
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -376,9 +379,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
-            strategy="veto",
-            quorum=2,
+            config={"voters": ["agent-a", "agent-b"], "strategy": "veto", "quorum": 2},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -404,9 +405,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
-            strategy="veto",
-            quorum=2,
+            config={"voters": ["agent-a", "agent-b"], "strategy": "veto", "quorum": 2},
         )
 
         engine.vote(proposal.proposal_id, "同意")
@@ -432,8 +431,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a"],
-            deadline_seconds=-1,  # 已过期
+            config={"voters": ["agent-a"], "deadline_seconds": -1},
         )
 
         import pytest
@@ -446,7 +444,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a"],
+            config={"voters": ["agent-a"]},
         )
 
         engine.cancel_proposal(proposal.proposal_id)
@@ -460,7 +458,7 @@ class TestDecisionEngine:
 
         proposal = engine_a.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
 
         # 导入到engine_b
@@ -475,9 +473,18 @@ class TestDecisionEngine:
         """测试列出提案"""
         engine = DecisionEngine(agent_id="agent-a")
 
-        p1 = engine.create_proposal(title="提案1", voters=["agent-a"])
-        p2 = engine.create_proposal(title="提案2", voters=["agent-a"])
-        p3 = engine.create_proposal(title="提案3", voters=["agent-a"])
+        p1 = engine.create_proposal(
+            title="提案1",
+            config={"voters": ["agent-a"]},
+        )
+        p2 = engine.create_proposal(
+            title="提案2",
+            config={"voters": ["agent-a"]},
+        )
+        p3 = engine.create_proposal(
+            title="提案3",
+            config={"voters": ["agent-a"]},
+        )
 
         # 取消一个
         engine.cancel_proposal(p3.proposal_id)
@@ -498,7 +505,7 @@ class TestDecisionEngine:
 
         proposal = engine_a.create_proposal(
             title="跨Agent提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
         engine_a.vote(proposal.proposal_id, "同意")
 
@@ -517,7 +524,7 @@ class TestDecisionEngine:
         engine = DecisionEngine(agent_id="agent-a")
         proposal = engine.create_proposal(
             title="测试提案",
-            voters=["agent-a", "agent-b"],
+            config={"voters": ["agent-a", "agent-b"]},
         )
 
         engine.vote(proposal.proposal_id, "同意")

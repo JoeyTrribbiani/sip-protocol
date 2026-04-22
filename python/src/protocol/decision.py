@@ -76,19 +76,32 @@ class Proposal:
         deadline: float,
         strategy: str,
         quorum: int,
-        description: str = "",
-        weights: Optional[Dict[str, float]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
+        """初始化提案
+
+        Args:
+            proposal_id: 提案ID
+            initiator: 发起者
+            title: 标题
+            options: 投票选项
+            voters: 投票者列表
+            deadline: 截止时间戳
+            strategy: 决策策略
+            quorum: 法定人数
+            metadata: 可选元数据（description, weights等）
+        """
+        meta = metadata or {}
         self.proposal_id = proposal_id
         self.initiator = initiator
         self.title = title
-        self.description = description
+        self.description = meta.get("description", "")
         self.options = options
         self.voters = voters
         self.deadline = deadline
         self.strategy = strategy
         self.quorum = quorum
-        self.weights = weights or {}
+        self.weights = meta.get("weights") or {}
         self.status = ProposalStatus.PENDING
         self.created_at = time.time()
         self.votes: List["Vote"] = []
@@ -123,8 +136,10 @@ class Proposal:
             deadline=data["deadline"],
             strategy=data["strategy"],
             quorum=data["quorum"],
-            description=data.get("description", ""),
-            weights=data.get("weights"),
+            metadata={
+                "description": data.get("description", ""),
+                "weights": data.get("weights"),
+            },
         )
         proposal.status = ProposalStatus(data["status"])
         proposal.created_at = data["created_at"]
@@ -185,17 +200,24 @@ class DecisionResult:
         status: ProposalStatus,
         winner: Optional[str],
         vote_counts: Dict[str, int],
-        total_votes: int,
-        quorum_met: bool,
-        details: str,
+        stats: Dict[str, Any],
     ):
+        """初始化决策结果
+
+        Args:
+            proposal_id: 提案ID
+            status: 提案状态
+            winner: 获胜选项
+            vote_counts: 各选项票数
+            stats: 统计信息（total_votes, quorum_met, details）
+        """
         self.proposal_id = proposal_id
         self.status = status
         self.winner = winner
         self.vote_counts = vote_counts
-        self.total_votes = total_votes
-        self.quorum_met = quorum_met
-        self.details = details
+        self.total_votes = stats.get("total_votes", 0)
+        self.quorum_met = stats.get("quorum_met", False)
+        self.details = stats.get("details", "")
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为字典"""
@@ -248,38 +270,33 @@ class DecisionEngine:
     def create_proposal(
         self,
         title: str,
-        options: Optional[List[str]] = None,
-        voters: Optional[List[str]] = None,
-        deadline_seconds: float = 3600.0,
-        strategy: Optional[str] = None,
-        quorum: Optional[int] = None,
-        description: str = "",
-        weights: Optional[Dict[str, float]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> Proposal:
         """
         创建提案
 
         Args:
             title: 提案标题
-            options: 投票选项（默认：["同意", "反对", "弃权"]）
-            voters: 投票者列表
-            deadline_seconds: 截止时间（秒）
-            strategy: 决策策略
-            quorum: 法定人数
-            description: 描述
-            weights: 加权权重（strategy="weighted"时使用）
+            config: 可选配置，支持以下键：
+                options: 投票选项（默认：["同意", "反对", "弃权"]）
+                voters: 投票者列表
+                deadline_seconds: 截止时间（秒，默认3600）
+                strategy: 决策策略
+                quorum: 法定人数
+                description: 描述
+                weights: 加权权重
 
         Returns:
             Proposal: 新创建的提案
         """
-        if options is None:
-            options = ["同意", "反对", "弃权"]
-        if voters is None:
-            voters = [self.agent_id]
-        if strategy is None:
-            strategy = self.default_strategy
-        if quorum is None:
-            quorum = min(self.default_quorum, len(voters))
+        cfg = config or {}
+        options = cfg.get("options", ["同意", "反对", "弃权"])
+        voters = cfg.get("voters", [self.agent_id])
+        deadline_seconds = cfg.get("deadline_seconds", 3600.0)
+        strategy = cfg.get("strategy", self.default_strategy)
+        quorum = cfg.get("quorum", min(self.default_quorum, len(voters)))
+        description = cfg.get("description", "")
+        weights = cfg.get("weights")
 
         proposal_id = f"prop-{uuid.uuid4().hex[:8]}"
         deadline = time.time() + deadline_seconds
@@ -293,8 +310,7 @@ class DecisionEngine:
             deadline=deadline,
             strategy=strategy,
             quorum=quorum,
-            description=description,
-            weights=weights,
+            metadata={"description": description, "weights": weights},
         )
 
         self._proposals[proposal_id] = proposal
@@ -386,9 +402,11 @@ class DecisionEngine:
                 status=proposal.status,
                 winner=None,
                 vote_counts=vote_counts,
-                total_votes=total_votes,
-                quorum_met=quorum_met,
-                details=f"提案已结束: {proposal.status.value}",
+                stats={
+                    "total_votes": total_votes,
+                    "quorum_met": quorum_met,
+                    "details": f"提案已结束: {proposal.status.value}",
+                },
             )
 
         # 未达法定人数
@@ -398,9 +416,11 @@ class DecisionEngine:
                 status=ProposalStatus.PENDING,
                 winner=None,
                 vote_counts=vote_counts,
-                total_votes=total_votes,
-                quorum_met=False,
-                details=f"未达法定人数: {total_votes}/{proposal.quorum}",
+                stats={
+                    "total_votes": total_votes,
+                    "quorum_met": False,
+                    "details": f"未达法定人数: {total_votes}/{proposal.quorum}",
+                },
             )
 
         # 根据策略计算结果
@@ -431,9 +451,11 @@ class DecisionEngine:
             status=proposal.status,
             winner=winner,
             vote_counts=vote_counts,
-            total_votes=total_votes,
-            quorum_met=quorum_met,
-            details=details,
+            stats={
+                "total_votes": total_votes,
+                "quorum_met": quorum_met,
+                "details": details,
+            },
         )
 
     def cancel_proposal(self, proposal_id: str) -> None:
@@ -515,8 +537,6 @@ class DecisionEngine:
         Returns:
             JSON字符串
         """
-        import json
-
         proposal = self._get_proposal(proposal_id)
         return json.dumps(proposal.to_dict(), ensure_ascii=False)
 
@@ -530,8 +550,6 @@ class DecisionEngine:
         Returns:
             Proposal: 提案对象
         """
-        import json
-
         data = json.loads(proposal_json)
         proposal = Proposal.from_dict(data)
         self._proposals[proposal.proposal_id] = proposal
@@ -630,4 +648,4 @@ class DecisionEngine:
             return None, f"否决: {reject_count}票反对"
 
         approve_option = proposal.options[0]
-        return approve_option, f"无否决，通过"
+        return approve_option, "无否决，通过"
