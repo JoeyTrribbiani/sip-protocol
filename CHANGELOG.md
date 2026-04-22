@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-22
+
+### 新增
+
+#### Agent A → Agent C 适配器
+- **HermesClaudeAdapter**（src/transport/hermes_claude_adapter.py）
+  - Hermes ↔ Claude Code 通过SIP协议端到端加密通信
+  - 架构：Hermes (加密) → OpenClaw sessions_send → Claude Code (解密)
+  - 发送前SIP加密+base64编码，接收后base64解码+SIP解密
+  - 使用示例（examples/hermes_claude_encrypted.py）
+
+#### 集体决策机制
+- **DecisionEngine**（src/protocol/decision.py）
+  - 提案创建（Proposal）
+  - 投票（Vote）
+  - 5种决策策略：简单多数、绝对多数、一致同意、加权投票、一票否决
+  - 跨Agent投票（导出/导入）
+  - 提案状态管理（pending/approved/rejected/expired/cancelled）
+  - 超时自动过期
+
+#### 文档改进
+- README算法描述统一为XChaCha20-Poly1305（主）+ AES-256-GCM（备选）
+- 添加ASCII架构图
+- 添加测试覆盖率数据（207测试，82%覆盖率）
+- 联系方式改为GitHub链接
+- CHANGELOG拆分为v1.1.0版本
+
+### 修复
+
+- 修复JS示例async/await混用
+- 修复hermes_claude_adapter的Pylint/MyPy警告
+- WebSocket测试在无websockets库时跳过
+- 修复transport层stats.get()的MyPy None+int错误
+
+### 变更
+
+- **测试总数**: 235个（新增24个决策测试 + 7个适配器测试）
+- **CI/CD**: 全部通过（Black/Pylint/MyPy/pytest）
+- **Hermes评审**: 7.8/10
+
 ## [1.1.0] - 2026-04-22
 
 ### 新增
