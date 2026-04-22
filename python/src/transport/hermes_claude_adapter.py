@@ -33,12 +33,14 @@ Hermes ↔ Claude Code 加密通信适配器
 """
 
 import asyncio
+import base64
 import json
 import os
+import subprocess
 from typing import Any, Dict, Optional
 
 from .encrypted_channel import EncryptedChannel, ChannelConfig
-from .message import AgentMessage, MessageType
+from .message import AgentMessage
 
 
 class HermesClaudeAdapter:
@@ -94,7 +96,6 @@ class HermesClaudeAdapter:
 
         # 这里需要调用OpenClaw的sessions_spawn
         # 由于这是Python代码，我们通过subprocess调用hermes CLI
-        import subprocess
 
         cmd = [
             "hermes",
@@ -115,6 +116,7 @@ class HermesClaudeAdapter:
             capture_output=True,
             text=True,
             timeout=60,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -150,14 +152,9 @@ class HermesClaudeAdapter:
 
         注意：这需要Claude Code也运行SIP协议栈。
         简化版本：直接用PSK派生会话密钥，跳过DH交换。
-        """
-        # 简化版本：用PSK直接建立通道
-        # 在实际场景中，应该通过DH交换建立密钥
 
-        # 生成一个虚拟的握手完成消息
-        # 这里我们假设双方都知道PSK，直接使用PSK派生密钥
-        # 实际应用中应该通过DH交换
-        pass
+        TODO: 实现完整的DH密钥交换流程
+        """
 
     async def send(self, plaintext: str) -> str:
         """
@@ -174,8 +171,6 @@ class HermesClaudeAdapter:
 
         # 2. 序列化并base64编码
         msg_json = encrypted_msg.to_json()
-        import base64
-
         msg_b64 = base64.b64encode(msg_json.encode()).decode()
 
         # 3. 通过OpenClaw的sessions_send发送
@@ -201,8 +196,6 @@ class HermesClaudeAdapter:
         # 由于Python直接调用OpenClaw API比较复杂，
         # 我们通过subprocess调用hermes CLI
 
-        import subprocess
-
         cmd = [
             "hermes",
             "sessions",
@@ -218,6 +211,7 @@ class HermesClaudeAdapter:
             capture_output=True,
             text=True,
             timeout=120,  # 2分钟超时
+            check=False,
         )
 
         if result.returncode != 0:
@@ -250,8 +244,6 @@ class HermesClaudeAdapter:
         encrypted_b64 = response_text[len("ENCRYPTED:") :]
 
         # Base64解码
-        import base64
-
         msg_json = base64.b64decode(encrypted_b64).decode()
 
         # 解析AgentMessage
@@ -279,9 +271,8 @@ class HermesClaudeAdapter:
         """关闭适配器"""
         if self._claude_session_key:
             # 关闭Claude Code子会话
-            import subprocess
-
             subprocess.run(
                 ["hermes", "sessions", "kill", "--session-key", self._claude_session_key],
                 capture_output=True,
+                check=False,
             )
