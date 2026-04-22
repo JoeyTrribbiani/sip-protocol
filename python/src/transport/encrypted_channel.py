@@ -145,6 +145,16 @@ class EncryptedChannel:
         self._on_error: Optional[Callable] = None
         self._on_state_change: Optional[Callable] = None
 
+    # ──────────────── 统计辅助方法 ────────────────
+
+    def _increment_stat(self, key: str, value: int = 1) -> None:
+        """安全地递增统计值"""
+        current = self._stats.get(key, 0)
+        if isinstance(current, (int, float)):
+            self._stats[key] = current + value
+        else:
+            self._stats[key] = value
+
     # ──────────────── 状态管理 ────────────────
 
     def _set_state(self, new_state: ChannelState) -> None:
@@ -197,7 +207,7 @@ class EncryptedChannel:
             )
         except Exception as e:
             self._set_state(ChannelState.ERROR)
-            self._stats["errors"] += 1
+            self._increment_stat("errors")
             if self._on_error:
                 self._on_error(e)
             raise
@@ -252,7 +262,7 @@ class EncryptedChannel:
             )
         except Exception as e:
             self._set_state(ChannelState.ERROR)
-            self._stats["errors"] += 1
+            self._increment_stat("errors")
             if self._on_error:
                 self._on_error(e)
             raise
@@ -269,6 +279,7 @@ class EncryptedChannel:
 
         try:
             handshake_auth = auth_msg.payload.get("data", auth_msg.payload)
+            assert self._handshake_state is not None
             session_keys, _ = complete_handshake(handshake_auth, self._handshake_state)
             self._session_keys = session_keys
             self._session_state = SessionState()
@@ -284,7 +295,7 @@ class EncryptedChannel:
             self._handshake_state = None
         except Exception as e:
             self._set_state(ChannelState.ERROR)
-            self._stats["errors"] += 1
+            self._increment_stat("errors")
             if self._on_error:
                 self._on_error(e)
             raise
@@ -317,6 +328,7 @@ class EncryptedChannel:
 
         # 加密消息
         self._send_counter += 1
+        assert self._session_keys is not None
         encrypted_payload = encrypt_message(
             encryption_key=self._session_keys["encryption_key"],
             plaintext=text,
@@ -334,8 +346,8 @@ class EncryptedChannel:
         )
 
         # 更新统计
-        self._stats["messages_sent"] += 1
-        self._stats["bytes_sent"] += len(msg.to_json())
+        self._increment_stat("messages_sent")
+        self._increment_stat("bytes_sent", len(msg.to_json()))
 
         return msg
 
@@ -364,7 +376,7 @@ class EncryptedChannel:
         if msg.type != MessageType.ENCRYPTED:
             # 普通文本消息直接返回
             if msg.type == MessageType.TEXT:
-                return msg.payload.get("text", "")
+                return str(msg.payload.get("text", ""))
             raise ValueError(f"不支持的消息类型: {msg.type}")
 
         # 检查消息过期
@@ -397,17 +409,18 @@ class EncryptedChannel:
 
         # 解密消息
         try:
+            assert self._session_keys is not None
             plaintext = decrypt_message(self._session_keys["encryption_key"], encrypted_payload)
         except Exception as e:
-            self._stats["errors"] += 1
+            self._increment_stat("errors")
             if self._on_error:
                 self._on_error(e)
             raise ValueError(f"消息解密失败: {e}") from e
 
         # 更新计数器和统计
         self._recv_counter = message_counter
-        self._stats["messages_received"] += 1
-        self._stats["bytes_received"] += len(msg.to_json())
+        self._increment_stat("messages_received")
+        self._increment_stat("bytes_received", len(msg.to_json()))
 
         return plaintext
 
@@ -420,7 +433,12 @@ class EncryptedChannel:
             self.close()
             return "[disconnect]"
         if action == ControlAction.ERROR.value:
-            error_msg = msg.payload.get("data", {}).get("message", "unknown error")
+            error_data = msg.payload.get("data", {})
+            error_msg = (
+                error_data.get("message", "unknown error")
+                if isinstance(error_data, dict)
+                else "unknown error"
+            )
             return f"[error: {error_msg}]"
         return f"[control: {action}]"
 
@@ -444,6 +462,7 @@ class EncryptedChannel:
     def _initiate_rekey(self) -> None:
         """发起密钥轮换"""
         self._set_state(ChannelState.REKEYING)
+        assert self._session_keys is not None
         session_state_dict = {
             "encryption_key": self._session_keys["encryption_key"],
             "auth_key": self._session_keys["auth_key"],

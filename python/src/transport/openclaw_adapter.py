@@ -123,6 +123,16 @@ class OpenClawAdapter:
         # 回调
         self._on_message_callback: Optional[Callable] = None
 
+    # ──────────────── 统计辅助方法 ────────────────
+
+    def _increment_stat(self, key: str, value: int = 1) -> None:
+        """安全地递增统计值"""
+        current = self._stats.get(key, 0)
+        if isinstance(current, (int, float)):
+            self._stats[key] = current + value
+        else:
+            self._stats[key] = value
+
     @property
     def channel(self) -> EncryptedChannel:
         """获取底层加密通道"""
@@ -147,7 +157,7 @@ class OpenClawAdapter:
 
     def _on_channel_error(self, _error: Exception) -> None:
         """通道错误回调"""
-        self._stats["errors"] += 1
+        self._increment_stat("errors")
 
     def _on_channel_state_change(self, old_state: ChannelState, new_state: ChannelState) -> None:
         """通道状态变更回调"""
@@ -156,7 +166,7 @@ class OpenClawAdapter:
 
     def start(self) -> None:
         """启动适配器"""
-        self._stats["started_at"] = time.time()
+        self._stats["started_at"] = int(time.time())
 
     def stop(self) -> None:
         """停止适配器"""
@@ -215,7 +225,7 @@ class OpenClawAdapter:
         """
         msg = self._channel.send(text, recipient_id)
         self._outbound_queue.append(msg)
-        self._stats["messages_sent"] += 1
+        self._increment_stat("messages_sent")
         return msg
 
     def receive_encrypted(self, msg: AgentMessage) -> str:
@@ -230,7 +240,7 @@ class OpenClawAdapter:
         """
         plaintext = self._channel.receive(msg)
         self._inbound_queue.append(msg)
-        self._stats["messages_received"] += 1
+        self._increment_stat("messages_received")
         if self._on_message_callback:
             self._on_message_callback(plaintext, msg)
         return plaintext
@@ -310,7 +320,7 @@ class OpenClawAdapter:
                     success=True,
                 )
                 self._sessions[session_label] = result
-                self._stats["sessions_spawned"] += 1
+                self._increment_stat("sessions_spawned")
                 return result
             return SpawnResult(
                 session_id="",

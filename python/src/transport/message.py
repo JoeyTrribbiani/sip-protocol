@@ -127,7 +127,9 @@ class AgentMessage:
         self.hop_count += 1
         return self
 
-    def create_reply(self, payload: Dict[str, Any], msg_type: MessageType = None) -> "AgentMessage":
+    def create_reply(
+        self, payload: Dict[str, Any], msg_type: Optional[MessageType] = None
+    ) -> "AgentMessage":
         """创建回复消息"""
         return AgentMessage(
             version=self.version,
@@ -193,7 +195,7 @@ def create_control_message(
     Returns:
         AgentMessage: 控制消息
     """
-    payload = {"action": action.value}
+    payload: Dict[str, Any] = {"action": action.value}
     if data:
         payload["data"] = data
     return AgentMessage(
