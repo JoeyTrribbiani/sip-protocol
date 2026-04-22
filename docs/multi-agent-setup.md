@@ -20,29 +20,32 @@ Hermes ──SIP加密──► OpenClaw Agent ──SIP加密──► Claude C
 在OpenClaw配置中注册SIP MCP Server：
 
 ```json
-// ~/.openclaw/openclaw.json
+// ~/.openclaw/openclaw.json → mcp.servers
 {
-  "mcp": {
-    "servers": {
-      "sip-protocol": {
-        "command": "python3",
-        "args": ["-m", "sip_protocol.transport.sip_mcp_server", "--psk", "<预共享密钥>", "--agent-id", "openclaw-agent"],
-        "cwd": "/path/to/sip-protocol/python"
-      }
-    }
+  "sip-protocol": {
+    "command": "/Users/joey0x1/.local/bin/python3.11",
+    "args": [
+      "/Users/joey0x1/.openclaw/workspace/sip-protocol/python/sip_mcp_server_standalone.py",
+      "--psk", "<预共享密钥>",
+      "--agent-id", "openclaw-agent"
+    ]
   }
 }
 ```
 
-Hermes端同样配置：
+> **注意**: 使用`sip_mcp_server_standalone.py`（独立版），而非`src/transport/sip_mcp_server.py`（相对导入无法独立运行）。
+
+Hermes端同样配置（在`mcp_config.json`中）：
 
 ```json
-// ~/.hermes/hermes-agent/mcp_config.json
 {
   "sip-protocol": {
-    "command": "python3",
-    "args": ["-m", "sip_protocol.transport.sip_mcp_server", "--psk", "<预共享密钥>", "--agent-id", "hermes"],
-    "cwd": "/path/to/sip-protocol/python"
+    "command": "/Users/joey0x1/.local/bin/python3.11",
+    "args": [
+      "/Users/joey0x1/.openclaw/workspace/sip-protocol/python/sip_mcp_server_standalone.py",
+      "--psk", "<预共享密钥>",
+      "--agent-id", "hermes"
+    ]
   }
 }
 ```
