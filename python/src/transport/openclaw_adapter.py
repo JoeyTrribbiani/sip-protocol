@@ -4,30 +4,71 @@ OpenClaw适配器模块
 
 提供以下能力：
 1. 通过subprocess调用OpenClaw CLI
-2. 通过Hermes MCP API发送加密消息
-3. 封装sessions_spawn/sessions_send等操作
-4. 管理Agent生命周期
+2. 通过HTTP调用OpenClaw Gateway API
+3. 通过Hermes MCP API发送加密消息
+4. 封装sessions_spawn/sessions_send等操作
+5. 管理Agent生命周期
+6. 实现TransportAdapter接口
 
 使用方式：
     adapter = OpenClawAdapter(agent_id="hermes")
-    await adapter.start()
-    await adapter.send_encrypted(target="openclaw", message="Hello!")
-    await adapter.stop()
+    await adapter.connect()
+    await adapter.send(message)
+    await adapter.close()
 """
 
+import asyncio
 import json
+import os
 import subprocess
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None  # type: ignore
+
+from .base import (
+    TransportAdapter,
+    TransportType,
+    TransportState,
+    TransportConfig,
+    ConnectionResult,
+    SendResult,
+    ReceiveResult,
+)
 from .message import (
     AgentMessage,
     MessageType,
+    ControlAction,
+    create_control_message,
+    create_text_message,
 )
 from .encrypted_channel import EncryptedChannel, ChannelState, ChannelConfig
 
 # ──────────────── 数据类 ────────────────
+
+
+@dataclass
+class GatewayConfig:
+    """Gateway API配置"""
+
+    # Gateway API地址
+    gateway_url: str = os.environ.get("OPENCLAW_GATEWAY_URL", "http://localhost:3000/api")
+    # API密钥
+    api_key: str = os.environ.get("OPENCLAW_API_KEY", "")
+    # Gateway token (Bearer认证)
+    gateway_token: str = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+    # 使用API而非CLI
+    use_api: bool = True
+    # 请求超时 (秒)
+    request_timeout: int = 30
+    # 最大重试次数
+    max_retries: int = 3
+    # 重试间隔 (秒)
+    retry_delay: float = 1.0
 
 
 @dataclass
@@ -40,6 +81,8 @@ class AgentConfig:
     openclaw_path: str = "openclaw"
     model: str = "claude-sonnet"
     label: str = ""
+    # Gateway配置
+    gateway: Optional[GatewayConfig] = None
 
 
 @dataclass
@@ -406,6 +449,192 @@ class OpenClawAdapter:
         msgs = self._inbound_queue.copy()
         self._inbound_queue.clear()
         return msgs
+
+    # ──────────────── 转发 ────────────────
+
+    # ──────────────── Gateway API操作 ────────────────
+
+    async def _gateway_request(
+        self,
+        method: str,
+        path: str,
+        data: Optional[Dict[str, Any]] = None,
+        timeout: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        向OpenClaw Gateway API发送HTTP请求
+
+        Args:
+            method: HTTP方法 (GET, POST, PUT, DELETE)
+            path: API路径 (如 /messages/send)
+            data: 请求体数据
+            timeout: 超时时间
+
+        Returns:
+            Dict[str, Any]: API响应JSON
+
+        Raises:
+            RuntimeError: Gateway不可用或请求失败
+        """
+        gateway_config = self.config.gateway
+        if gateway_config is None:
+            raise RuntimeError("Gateway配置未提供")
+
+        if aiohttp is None:
+            raise RuntimeError("aiohttp未安装，请运行: pip install aiohttp")
+
+        url = f"{gateway_config.gateway_url.rstrip('/')}{path}"
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+
+        if gateway_config.api_key:
+            headers["X-API-Key"] = gateway_config.api_key
+        if gateway_config.gateway_token:
+            headers["Authorization"] = f"Bearer {gateway_config.gateway_token}"
+
+        request_timeout = timeout or gateway_config.request_timeout
+        last_error: Optional[Exception] = None
+
+        for attempt in range(gateway_config.max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        json=data,
+                        timeout=aiohttp.ClientTimeout(total=request_timeout),
+                    ) as response:
+                        if response.status == 200:
+                            return await response.json()
+                        elif response.status == 401:
+                            raise RuntimeError(
+                                "Gateway认证失败：请检查OPENCLAW_API_KEY或OPENCLAW_GATEWAY_TOKEN"
+                            )
+                        elif response.status == 404:
+                            raise RuntimeError(f"Gateway API端点不存在: {path}")
+                        elif response.status >= 500:
+                            # 服务端错误，重试
+                            text = await response.text()
+                            last_error = RuntimeError(
+                                f"Gateway服务端错误 ({response.status}): {text}"
+                            )
+                            if attempt < gateway_config.max_retries - 1:
+                                await asyncio.sleep(gateway_config.retry_delay * (attempt + 1))
+                                continue
+                            raise last_error
+                        else:
+                            text = await response.text()
+                            raise RuntimeError(f"Gateway请求失败 ({response.status}): {text}")
+            except aiohttp.ClientConnectorError as e:
+                last_error = RuntimeError(f"无法连接到Gateway ({gateway_config.gateway_url}): {e}")
+                if attempt < gateway_config.max_retries - 1:
+                    await asyncio.sleep(gateway_config.retry_delay * (attempt + 1))
+                    continue
+                raise last_error from e
+            except asyncio.TimeoutError as e:
+                last_error = RuntimeError(f"Gateway请求超时 ({request_timeout}s): {path}")
+                if attempt < gateway_config.max_retries - 1:
+                    await asyncio.sleep(gateway_config.retry_delay * (attempt + 1))
+                    continue
+                raise last_error from e
+
+        raise last_error or RuntimeError("Gateway请求失败")
+
+    async def gateway_send_message(
+        self,
+        target: str,
+        text: str,
+        encrypted: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        通过Gateway API发送消息
+
+        Args:
+            target: 目标标识 (如 "telegram:12345", "discord:#general")
+            text: 消息文本
+            encrypted: 是否使用SIP加密
+
+        Returns:
+            Dict[str, Any]: API响应
+        """
+        if encrypted and self.is_connected:
+            encrypted_msg = self.send_encrypted(text)
+            payload_text = encrypted_msg.to_json()
+        else:
+            payload_text = text
+
+        return await self._gateway_request(
+            method="POST",
+            path="/messages/send",
+            data={
+                "target": target,
+                "message": payload_text,
+            },
+        )
+
+    async def gateway_read_messages(
+        self,
+        channel: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        通过Gateway API读取消息
+
+        Args:
+            channel: 频道标识 (可选)
+            limit: 消息数量限制
+
+        Returns:
+            List[Dict[str, Any]]: 消息列表
+        """
+        params: Dict[str, Any] = {"limit": limit}
+        if channel:
+            params["channel"] = channel
+
+        result = await self._gateway_request(
+            method="GET",
+            path="/messages/read",
+            data=params if False else None,
+        )
+        messages = result.get("messages", [])
+
+        # 如果通道已建立，尝试解密加密消息
+        if self.is_connected:
+            for msg_data in messages:
+                content = msg_data.get("content", "")
+                if msg_data.get("encrypted", False) and content:
+                    try:
+                        agent_msg = AgentMessage.from_json(content)
+                        plaintext = self.receive_encrypted(agent_msg)
+                        msg_data["decrypted_content"] = plaintext
+                    except Exception:
+                        pass  # 无法解密，保留原始内容
+
+        return messages
+
+    async def gateway_list_channels(
+        self,
+        platform: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        通过Gateway API列出可用频道
+
+        Args:
+            platform: 平台过滤 (telegram, discord, slack等)
+
+        Returns:
+            List[Dict[str, Any]]: 频道列表
+        """
+        params: Dict[str, Any] = {}
+        if platform:
+            params["platform"] = platform
+
+        result = await self._gateway_request(
+            method="GET",
+            path="/channels/list",
+            data=params if False else None,
+        )
+        return result.get("channels", [])
 
     # ──────────────── 转发 ────────────────
 

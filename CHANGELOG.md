@@ -7,162 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### 新增
 
-#### Security Features
-- **Rekey密钥轮换功能**（src/protocol/rekey.py，115行代码）
-  - Rekey请求创建和验证
-  - Rekey响应创建和验证
-  - 新密钥派生和应用
-  - HMAC签名验证（防MITM）
-  - 时间戳验证（±5分钟，防重放）
-  - 序列号验证（防回滚）
-  - 前向保密（旧密钥无法解密新消息）
-  - 双向确认（确保密钥同步）
+#### P2 增强功能
+- **协议版本协商**（src/protocol/version.py）
+  - 支持 SIP-1.0 ~ SIP-1.3
+  - 版本比较和向后兼容检查
+- **消息分片支持**（src/protocol/fragment.py）
+  - 自动分片大消息（>1MB）
+  - 分片重组和超时处理（30秒）
+- **连接恢复机制**（src/protocol/resume.py）
+  - 会话状态序列化/反序列化
+  - 24小时TTL过期检查
+  - 消息计数器验证
 
-#### Testing
+#### P3 群组加密完善
+- **群组管理消息**（9种消息类型）
+  - group_init、group_join_ack、group_chain_key、group_chain_key_ack
+  - group_add_member、group_join_request、group_leave、group_leave_ack、group_error
+- **完整成员管理流程**
+  - 成员加入流程（6步，后向保密）
+  - 成员离开流程（4步，前向保密）
+- **简化群组实现**（src/protocol/group_simple.py）
+
+#### 传输层
+- **Agent消息格式**（src/transport/message.py）
+  - 3种消息类型：TEXT / ENCRYPTED / CONTROL
+  - 4种优先级：LOW / NORMAL / HIGH / URGENT
+  - 10种控制动作
+- **加密通道**（src/transport/encrypted_channel.py）
+  - 完整生命周期：IDLE → HANDSHAKING → ESTABLISHED → CLOSED
+  - 握手、加密收发、Rekey、心跳、断开
+  - 重放攻击防护
+- **OpenClaw适配器**（src/transport/openclaw_adapter.py）
+  - 封装加密通道 + OpenClaw CLI集成
+  - sessions_spawn / sessions_send适配
+  - 三方消息转发
+
+#### 集成测试与性能测试
+- **端到端集成测试**（tests/test_integration.py）
+  - 完整握手流程
+  - 完整生命周期（握手→加密→Rekey→恢复）
+- **性能测试**（tests/test_performance.py）
+  - 高频消息发送测试
+  - 大规模群组测试
+  - 压力测试
+- **三方通信示例**（examples/three_party_chat.py）
+  - Hermes ↔ OpenClaw ↔ Claude Code 加密通信演示
+
+#### 测试
 - **Rekey测试用例**（tests/test_rekey.py，9个测试场景）
-  - Rekey请求创建和验证
-  - 无效签名检测
-  - Rekey响应创建和验证
-  - 完整Rekey流程
-  - 时间戳验证
-  - 序列号验证
-  - 前向保密性验证
+- **P2功能测试**（tests/test_p2_features.py，18个测试）
+- **群组管理测试**（tests/test_group_management.py，13个测试）
+- **传输层测试**（tests/test_transport.py，61个测试）
 - **测试向量生成脚本**（python/generate_test_vectors.py）
-- **完整测试向量**（docs/test_vectors.json）
-  - 握手测试向量
-  - 消息加密测试向量
-  - 群组加密测试向量
-  - Rekey测试向量
 
-### Fixed
+### 修复
 
-#### Python Code Quality
-- **代码格式化问题**（Black）
-  - src/crypto/xchacha20_poly1305.py
-  - src/protocol/handshake.py
-- **Pylint警告**
-  - 修复src/__init__.py中的self-assigning-variable警告
-- **MyPy类型错误**（3个文件）
-  - src/protocol/message.py: 将`replay_key: bytes = None`改为`replay_key: Optional[bytes] = None`
-  - src/crypto/argon2.py: 将`salt: bytes = None`改为`salt: Optional[bytes] = None`
-  - src/protocol/group.py: 为`members`字段添加类型注解`members: dict = {}`
+#### CI/CD 问题
+- 修复 ModuleNotFoundError（添加 __init__.py 文件和 pip install -e .）
+- 修复 Black 格式化问题（aes_gcm.py、hkdf.py）
+- 修复 Pylint 警告（未使用导入、类型错误等）
+- 修复 MyPy 类型错误（transport层24个错误）
+- 修复 pyproject.toml 包发现配置
 
-### Changed
+#### 代码质量
+- 修复 handshake.py 三重DH重复计算
+- 修复 handshake.py 时间戳不一致导致偶发HMAC验证失败
+- 修复 group.py 调试 print 语句
+- 修复 group_simple.py MyPy 返回类型错误
 
-#### Code Quality
-- **Pylint评分**: 从7.69/10提升到10.00/10（满分）
-- **测试覆盖率**: 提升至77%（452 statements, 102 missed）
+### 变更
+
+#### 代码质量
+- **Pylint评分**: 10.00/10（满分）
+- **测试总数**: 117个（Python 111 + JavaScript 6）
+- **测试覆盖率**: 82%
 - **所有CI/CD检查通过**
   - ✅ Black: 所有文件格式正确
   - ✅ Pylint: 10.00/10
   - ✅ MyPy: 无类型错误
-  - ✅ Python测试: 16个测试用例全部通过
-  - ✅ JavaScript测试: 6个测试场景全部通过
-
-### Added
-
-#### Python
-- 模块化重构：crypto、protocol、managers模块
-- 新增`src/`目录结构
-- 新增`pyproject.toml`配置文件
-- 新增Black代码格式化支持
-- 新增Pylint代码检查
-- 新增Mypy类型检查
-- 新增pytest测试框架
-- 新增pytest-cov覆盖率工具
-- 新增Python贡献指南（CONTRIBUTING.md）
-
-#### JavaScript
-- 模块化重构：crypto、protocol、managers模块
-- 新增`src/`目录结构
-- 新增性能基准测试（benchmarks/performance.js）
-- 新增ESLint代码检查
-- 新增Prettier代码格式化
-- 新增JavaScript贡献指南（CONTRIBUTING.md）
-
-#### CI/CD
-- 新增GitHub Actions CI/CD配置
-- 新增JavaScript测试工作流
-- 新增Python测试工作流
-- 新增安全审计工作流
-- 新增性能测试工作流
-- 新增Codecov覆盖率报告
-
-#### Documentation
-- 新增README.md
-- 新增CONTRIBUTING.md（Python和JavaScript）
-- 新增ARCHITECTURE.md（待添加）
-
-### Changed
-
-- 将Python代码从单文件（1266行）重构为模块化（15个文件）
-- 将JavaScript代码从单文件（449行）重构为模块化（15个文件）
-- 更新依赖配置（pyproject.toml替代setup.py）
-- 更新测试配置（pytest替代unittest）
-
-### Fixed
-
-- 修复AES-GCM加密实现错误
-- 修复群组链密钥初始化错误
-- 修复Skip Ratchet逻辑错误
-- 修复Python语法错误
-
-### Performance
-
-- DH密钥交换：0.025ms（Python），0.022ms（JavaScript）✅
-- HKDF密钥派生：0.010ms（Python），0.008ms（JavaScript）✅
-- AES-GCM加密（1KB）：0.006ms（Python），0.005ms（JavaScript）✅
-- 群组加密（顺序）：0.025ms（Python），0.020ms（JavaScript）✅
-- 群组加密（乱序）：0.050ms（Python），0.042ms（JavaScript）✅
-
-所有性能指标远超要求（>100倍）
+  - ✅ Python测试: 111个测试全部通过
+  - ✅ JavaScript测试: 6个测试全部通过
 
 ---
 
 ## [1.0.0] - 2026-04-21
 
-### Added
+### 新增
 
-#### Core Features
+#### 核心功能
 - 端到端加密（E2EE）支持
 - 基于Signal Double Ratchet的握手协议
-- 群组加密支持
-- Skip Ratchet算法（乱序消息）
+- 三重DH密钥交换（X25519）
+- XChaCha20-Poly1305对称加密
+- HKDF-SHA256密钥派生
+- Argon2id PSK哈希
+- 群组加密支持（Double Ratchet + Skip Ratchet）
 - 防重放攻击（Nonce + Replay Tag）
 - 消息认证（HMAC-SHA256）
 - PSK验证（防止中间人攻击）
+- Rekey密钥轮换
 
-#### Cryptography
-- X25519 ECDH密钥交换
-- HKDF-SHA256密钥派生
-- AES-256-GCM对称加密
-- Argon2id密钥哈希
-
-#### Languages
+#### 语言实现
 - Python 3.11+ 实现完整
 - Node.js 20+ 实现完整
 
-#### Documentation
-- 完整的协议文档（e2ee-protocol.md）
-- 群智协同架构文档（agent-chat-architecture.md）
+#### 文档
+- 完整的协议文档（docs/e2ee-protocol.md）
+- 群智协同架构文档（docs/agent-chat-architecture.md）
 - Python示例代码
 - JavaScript示例代码
 
-#### Tests
-- Python单元测试（6个测试用例）
-- JavaScript单元测试（6个测试用例）
+#### 测试
+- Python单元测试
+- JavaScript单元测试
+- 测试覆盖率报告
 
-### Performance
+### 性能
 
 - DH密钥交换：~0.025ms
 - HKDF密钥派生：~0.010ms
-- AES-GCM加密（1KB）：~0.006ms
+- 加密（1KB）：~0.006ms
 - 群组加密（顺序）：~0.025ms
 - 群组加密（乱序）：~0.050ms
 
-### Security
+### 安全
 
 - 使用加密安全的随机数生成器
 - 使用恒定时间比较（防止时序攻击）
@@ -173,9 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-04-20
 
-### Added
+### 新增
 
-#### Initial Release
 - 基本握手协议
 - 消息加密/解密
 - Python实现（单文件）
@@ -186,10 +155,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.1] - 2026-04-19
 
-### Added
+### 新增
 
-#### Project Initialization
-- 项目结构
+- 项目初始化
 - 协议设计文档
 - README
 - LICENSE
