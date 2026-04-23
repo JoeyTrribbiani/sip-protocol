@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 新增
+
+#### 异常类体系（Task 1/9）
+- **ErrorSeverity** 枚举（src/sip_protocol/exceptions.py）
+  - LOW / MEDIUM / HIGH / CRITICAL 四级严重度
+  - 继承 str + enum.Enum，支持序列化为字符串
+- **SIPError** 基类（src/sip_protocol/exceptions.py）
+  - 基于 dataclass，继承 Exception
+  - 统一字段：code, message, severity, recoverable, details
+  - to_dict / from_dict 序列化与反序列化
+  - _register_error 装饰器 + _ERROR_REGISTRY 注册表
+  - 12个测试全部通过，100%覆盖率
+
 ## [1.3.0] - 2026-04-22
 
 ### 新增
