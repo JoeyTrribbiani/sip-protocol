@@ -1,6 +1,7 @@
 """SIP 消息 Schema 类型系统测试"""
 
 import pytest
+from sip_protocol.schema.message import SIPMessage, create_message
 from sip_protocol.schema.parts import (
     ContextPart,
     DataPart,
@@ -17,6 +18,7 @@ from sip_protocol.schema.types import (
     Priority,
     RecipientType,
 )
+from sip_protocol.schema.validation import validate_message, validate_parts
 
 
 class TestMessageType:
@@ -351,3 +353,315 @@ class TestPartFromDict:
     def test_missing_type_raises(self):
         with pytest.raises(ValueError, match="Unknown part type: "):
             part_from_dict({})
+
+
+# ==================== SIPMessage 测试 ====================
+
+
+class TestSIPMessageDefaults:
+    def test_default_schema_version(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.schema == "sip-msg/v1"
+
+    def test_default_message_type(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.message_type == MessageType.TEXT
+
+    def test_default_recipient_type(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.recipient_type == RecipientType.DIRECT
+
+    def test_default_parts_empty(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.parts == []
+
+    def test_default_metadata(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.metadata["priority"] == "normal"
+        assert msg.metadata["ttl"] == 0
+        assert msg.metadata["custom"] == {}
+
+    def test_auto_generated_id(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.id != ""
+        assert len(msg.id) > 0
+
+    def test_auto_generated_conversation_id(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.conversation_id != ""
+        assert msg.conversation_id != msg.id  # 应该是独立的UUID
+
+    def test_optional_fields_none_by_default(self):
+        msg = SIPMessage(sender_id="alice")
+        assert msg.parent_id is None
+        assert msg.task_id is None
+        assert msg.recipient_id is None
+        assert msg.recipient_group is None
+
+
+class TestSIPMessageToDict:
+    def test_basic_fields(self):
+        msg = SIPMessage(sender_id="alice", recipient_id="bob")
+        d = msg.to_dict()
+        assert d["sender_id"] == "alice"
+        assert d["recipient_id"] == "bob"
+        assert d["schema"] == "sip-msg/v1"
+        assert d["message_type"] == "text"
+        assert d["recipient_type"] == "direct"
+
+    def test_optional_fields_omitted_when_none(self):
+        msg = SIPMessage(sender_id="alice")
+        d = msg.to_dict()
+        assert "parent_id" not in d
+        assert "task_id" not in d
+        assert "recipient_id" not in d
+        assert "recipient_group" not in d
+
+    def test_optional_fields_included_when_set(self):
+        msg = SIPMessage(
+            sender_id="alice", parent_id="p1", task_id="t1",
+            recipient_id="bob", recipient_group="team-a",
+        )
+        d = msg.to_dict()
+        assert d["parent_id"] == "p1"
+        assert d["task_id"] == "t1"
+        assert d["recipient_id"] == "bob"
+        assert d["recipient_group"] == "team-a"
+
+    def test_parts_serialized(self):
+        msg = SIPMessage(
+            sender_id="alice",
+            parts=[TextPart(text="hello"), DataPart(data={"key": "val"})],
+        )
+        d = msg.to_dict()
+        assert len(d["parts"]) == 2
+        assert d["parts"][0] == {"type": "text", "text": "hello"}
+        assert d["parts"][1]["type"] == "data"
+
+    def test_metadata_included(self):
+        msg = SIPMessage(sender_id="alice")
+        d = msg.to_dict()
+        assert d["metadata"]["priority"] == "normal"
+
+    def test_timestamp_present(self):
+        msg = SIPMessage(sender_id="alice")
+        d = msg.to_dict()
+        assert "timestamp" in d
+        # ISO 8601 格式校验
+        assert d["timestamp"].endswith("Z")
+
+
+class TestSIPMessageFromDict:
+    def test_basic_deserialization(self):
+        data = {
+            "id": "msg-1", "conversation_id": "conv-1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "alice", "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z", "parts": [], "metadata": {},
+        }
+        msg = SIPMessage.from_dict(data)
+        assert msg.id == "msg-1"
+        assert msg.conversation_id == "conv-1"
+        assert msg.message_type == MessageType.TEXT
+        assert msg.sender_id == "alice"
+
+    def test_parts_deserialized(self):
+        data = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}], "metadata": {},
+        }
+        msg = SIPMessage.from_dict(data)
+        assert len(msg.parts) == 1
+        assert isinstance(msg.parts[0], TextPart)
+        assert msg.parts[0].text == "hi"
+
+    def test_optional_fields_deserialized(self):
+        data = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "task_delegate", "sender_id": "a",
+            "recipient_type": "group", "recipient_group": "dev-team",
+            "parent_id": "p1", "task_id": "t1",
+            "timestamp": "2025-01-01T00:00:00Z", "parts": [], "metadata": {},
+        }
+        msg = SIPMessage.from_dict(data)
+        assert msg.parent_id == "p1"
+        assert msg.task_id == "t1"
+        assert msg.recipient_group == "dev-team"
+        assert msg.message_type == MessageType.TASK_DELEGATE
+        assert msg.recipient_type == RecipientType.GROUP
+
+    def test_round_trip(self):
+        original = SIPMessage(
+            sender_id="alice", recipient_id="bob",
+            parts=[TextPart(text="hello")],
+            metadata={"priority": "high", "ttl": 60, "custom": {"key": "val"}},
+        )
+        d = original.to_dict()
+        restored = SIPMessage.from_dict(d)
+        assert restored.sender_id == original.sender_id
+        assert restored.recipient_id == original.recipient_id
+        assert restored.parts[0].text == original.parts[0].text
+        assert restored.metadata["priority"] == "high"
+        assert restored.metadata["ttl"] == 60
+
+
+class TestCreateMessage:
+    def test_basic_creation(self):
+        msg = create_message(sender_id="alice", recipient_id="bob")
+        assert msg.sender_id == "alice"
+        assert msg.recipient_id == "bob"
+        assert msg.recipient_type == RecipientType.DIRECT
+        assert msg.message_type == MessageType.TEXT
+
+    def test_with_parts(self):
+        parts = [TextPart(text="hello"), DataPart(data=42)]
+        msg = create_message(sender_id="alice", parts=parts)
+        assert len(msg.parts) == 2
+
+    def test_with_priority(self):
+        msg = create_message(sender_id="alice", priority=Priority.URGENT)
+        assert msg.metadata["priority"] == "urgent"
+
+    def test_with_ttl(self):
+        msg = create_message(sender_id="alice", ttl=300)
+        assert msg.metadata["ttl"] == 300
+
+    def test_with_reply_to(self):
+        msg = create_message(sender_id="alice", reply_to="msg-123")
+        assert msg.metadata["reply_to"] == "msg-123"
+
+    def test_with_custom_metadata(self):
+        msg = create_message(sender_id="alice", custom_metadata={"source": "cli"})
+        assert msg.metadata["custom"]["source"] == "cli"
+
+    def test_group_message(self):
+        msg = create_message(sender_id="alice", recipient_type=RecipientType.GROUP, recipient_group="dev")
+        assert msg.recipient_type == RecipientType.GROUP
+        assert msg.recipient_group == "dev"
+
+    def test_task_delegate_message(self):
+        msg = create_message(
+            sender_id="alice", recipient_id="bob",
+            message_type=MessageType.TASK_DELEGATE, task_id="task-1",
+        )
+        assert msg.message_type == MessageType.TASK_DELEGATE
+        assert msg.task_id == "task-1"
+
+    def test_recipient_type_as_string(self):
+        msg = create_message(sender_id="alice", recipient_type="group", recipient_group="dev")
+        assert msg.recipient_type == RecipientType.GROUP
+
+    def test_auto_generated_ids(self):
+        msg = create_message(sender_id="alice")
+        assert msg.id != ""
+        assert msg.conversation_id != ""
+
+    def test_no_reply_to_by_default(self):
+        msg = create_message(sender_id="alice")
+        assert "reply_to" not in msg.metadata
+
+
+# ==================== 验证逻辑测试 ====================
+
+
+class TestValidateMessage:
+    def test_valid_message(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "recipient_id": "b", "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        assert errors == []
+
+    def test_missing_required_fields(self):
+        errors = validate_message({})
+        assert any("missing required field: id" in e for e in errors)
+        assert any("missing required field: sender_id" in e for e in errors)
+        assert any("missing required field: parts" in e for e in errors)
+
+    def test_empty_parts(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z", "parts": [],
+        }
+        errors = validate_message(msg)
+        assert any("parts must not be empty" in e for e in errors)
+
+    def test_direct_without_recipient_id(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        assert any("DIRECT type requires recipient_id" in e for e in errors)
+
+    def test_group_without_recipient_group(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "group",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        assert any("GROUP type requires recipient_group" in e for e in errors)
+
+    def test_broadcast_no_extra_requirement(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "broadcast",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        # broadcast 不要求 recipient_id 或 recipient_group
+        assert not any("requires" in e for e in errors)
+
+    def test_valid_direct_message(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "recipient_id": "b", "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        assert errors == []
+
+    def test_valid_group_message(self):
+        msg = {
+            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
+            "message_type": "text", "sender_id": "a", "recipient_type": "group",
+            "recipient_group": "dev-team", "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [{"type": "text", "text": "hi"}],
+        }
+        errors = validate_message(msg)
+        assert errors == []
+
+
+class TestValidateParts:
+    def test_valid_parts(self):
+        parts = [{"type": "text", "text": "hi"}, {"type": "data", "data": 42}]
+        errors = validate_parts(parts)
+        assert errors == []
+
+    def test_empty_parts(self):
+        errors = validate_parts([])
+        assert errors == ["parts must not be empty"]
+
+    def test_unknown_part_type_raises(self):
+        with pytest.raises(ValueError, match="Unknown part type: invalid_type"):
+            validate_parts([{"type": "invalid_type"}])
+
+    def test_all_valid_types(self):
+        valid = [
+            {"type": "text"}, {"type": "data"}, {"type": "file_ref"},
+            {"type": "file_data"}, {"type": "tool_request"},
+            {"type": "tool_response"}, {"type": "context"}, {"type": "stream"},
+        ]
+        errors = validate_parts(valid)
+        assert errors == []
