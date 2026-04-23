@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
+import shutil
 import time
 from typing import Protocol, runtime_checkable
 
@@ -91,16 +93,12 @@ class LocalFileStore:
 
     def delete(self, file_id: str) -> None:
         """删除文件及所有块"""
-        import shutil
-
         fdir = self._file_dir(file_id)
         if os.path.exists(fdir):
             shutil.rmtree(fdir)
 
     def cleanup_expired(self) -> int:
         """清理过期文件，返回删除数量"""
-        import datetime
-
         now = time.time()
         cleaned = 0
         if not os.path.exists(self._files_dir):

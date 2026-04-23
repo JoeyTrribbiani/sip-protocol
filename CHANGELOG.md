@@ -9,16 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 新增
 
-#### 异常类体系（Task 1/9）
-- **ErrorSeverity** 枚举（src/sip_protocol/exceptions.py）
-  - LOW / MEDIUM / HIGH / CRITICAL 四级严重度
-  - 继承 str + enum.Enum，支持序列化为字符串
+#### SIP 混合 Schema（S1）
+- **SIPEnvelope**（src/sip_protocol/schema/envelope.py）
+  - 加密载体数据类，payload 为 bytes，content_type + content_encoding 顶层字段
+  - to_dict / from_dict 序列化支持
+- **SIPMessage**（src/sip_protocol/schema/message.py）
+  - 结构化语义数据类，包含 message_id、sender、recipient、content_type、parts
+  - parent_id 在消息层（不在信封层）
+  - create_message() 工厂函数 + MessageOptions 参数对象
+- **8 种 Part 类型**（src/sip_protocol/schema/parts.py）
+  - TextPart, BinaryPart, FileRefPart, FileDataPart, AgentRefPart, TaskPart, ControlPart, ErrorPart
+  - FileRefPart（轻量引用）与 FileDataPart（重量级内联）语义分离
+- **验证逻辑**（src/sip_protocol/schema/validation.py）
+  - validate_message() 入口验证函数
+- **工具函数**（src/sip_protocol/schema/_utils.py）
+  - _generate_uuid7()、_iso_now() 提取去重
+
+#### 异常类体系（P2）
 - **SIPError** 基类（src/sip_protocol/exceptions.py）
-  - 基于 dataclass，继承 Exception
-  - 统一字段：code, message, severity, recoverable, details
-  - to_dict / from_dict 序列化与反序列化
+  - 基于 dataclass，17 个分层异常，to_dict / from_dict 序列化
   - _register_error 装饰器 + _ERROR_REGISTRY 注册表
-  - 12个测试全部通过，100%覆盖率
+
+#### 文件传输（F1）
+- **FileTransferConfig**（src/sip_protocol/file_transfer/config.py）
+  - 可配置阈值：inline_threshold, chunk_size, max_file_size
+  - should_inline() / validate_size()
+- **FileChunk + FileManifest**（src/sip_protocol/file_transfer/manifest.py）
+  - 文件块描述（index, size, hash）
+  - 文件清单（元数据 + 块列表 + 序列化）
+- **LocalFileStore**（src/sip_protocol/file_transfer/store.py）
+  - 本地文件系统存储，目录结构化
+  - FileStore Protocol 定义接口
+  - 过期文件自动清理
+- **FileTransferManager**（src/sip_protocol/file_transfer/manager.py）
+  - send_file()：小文件内联（FileDataPart），大文件分块引用（FileRefPart）
+  - receive_file()：引用解析 → 块校验 → 重组
+  - TransferProgress 进度追踪
+- **文件传输异常**（追加到 exceptions.py）
+  - FileTransferError, ChunkIntegrityError, FileTooLargeError
 
 ## [1.3.0] - 2026-04-22
 
@@ -88,8 +116,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 覆盖率：81%
 - Pylint：10.00/10
 - Black：通过
-
-## [Unreleased]
 
 ## [1.2.0] - 2026-04-22
 
