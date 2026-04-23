@@ -3,6 +3,7 @@
 在SIP加密层之上承载Agent通信语义。
 """
 
+from sip_protocol.schema.envelope import SIPEnvelope
 from sip_protocol.schema.message import SIPMessage, create_message
 from sip_protocol.schema.parts import (
     ContextPart,
@@ -23,6 +24,8 @@ from sip_protocol.schema.types import (
 from sip_protocol.schema.validation import validate_message, validate_parts
 
 __all__ = [
+    # 信封
+    "SIPEnvelope",
     # 枚举类型
     "MessageType",
     "Priority",
