@@ -193,6 +193,9 @@ from sip_protocol.exceptions import (
     GroupError,
     MemberNotFoundError,
     GroupKeyError,
+    FileTransferError,
+    ChunkIntegrityError,
+    FileTooLargeError,
 )
 
 
@@ -300,6 +303,9 @@ class TestErrorRegistry:
             "SIP-GROUP-000",
             "SIP-GROUP-001",
             "SIP-GROUP-002",
+            "SIP-FILE-000",
+            "SIP-FILE-001",
+            "SIP-FILE-002",
         }
         assert set(_ERROR_REGISTRY.keys()) == expected
 
@@ -339,6 +345,9 @@ class TestSubclassFromDictRoundtrip:
             GroupError,
             MemberNotFoundError,
             GroupKeyError,
+            FileTransferError,
+            ChunkIntegrityError,
+            FileTooLargeError,
         ],
     )
     def test_roundtrip_preserves_all_fields(self, cls):
@@ -347,9 +356,9 @@ class TestSubclassFromDictRoundtrip:
         d = original.to_dict()
         recovered = SIPError.from_dict(d)
 
-        assert isinstance(recovered, cls), (
-            f"from_dict 返回了 {type(recovered).__name__}，期望 {cls.__name__}"
-        )
+        assert isinstance(
+            recovered, cls
+        ), f"from_dict 返回了 {type(recovered).__name__}，期望 {cls.__name__}"
         assert recovered.code == original.code
         assert recovered.message == original.message
         assert recovered.severity == original.severity
@@ -372,4 +381,3 @@ class TestSubclassFromDictRoundtrip:
         assert recovered.severity == ErrorSeverity.CRITICAL
         assert recovered.recoverable is False
         assert recovered.details == {"algorithm": "x25519"}
-

@@ -352,3 +352,41 @@ class GroupKeyError(GroupError):
     def __init__(self, message: str = "群组密钥错误", **kwargs: Any) -> None:
         kwargs.setdefault("code", "SIP-GROUP-002")
         super().__init__(message=message, **kwargs)
+
+
+# ==================== 文件传输异常 ====================
+
+
+@_register_error
+@dataclass
+class FileTransferError(SIPError):
+    """文件传输基础异常"""
+
+    def __init__(self, message: str = "文件传输错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-FILE-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class ChunkIntegrityError(FileTransferError):
+    """块完整性校验失败"""
+
+    def __init__(self, chunk_index: int = 0, **kwargs: Any) -> None:
+        msg = f"块 {chunk_index} 完整性校验失败" if chunk_index >= 0 else "完整性校验失败"
+        kwargs.setdefault("code", "SIP-FILE-001")
+        kwargs.setdefault("recoverable", False)
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
+
+
+@_register_error
+@dataclass
+class FileTooLargeError(FileTransferError):
+    """文件过大"""
+
+    def __init__(self, file_size: int = 0, max_size: int = 0, **kwargs: Any) -> None:
+        msg = f"文件过大: {file_size} > {max_size}"
+        kwargs.setdefault("code", "SIP-FILE-002")
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
