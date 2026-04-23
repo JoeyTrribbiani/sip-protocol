@@ -307,3 +307,69 @@ class TestErrorRegistry:
         from sip_protocol.exceptions import _ERROR_REGISTRY
 
         assert _ERROR_REGISTRY.get("SIP-UNKNOWN") is None
+
+
+class TestSubclassFromDictRoundtrip:
+    """所有已注册异常子类的 to_dict/from_dict 往返测试"""
+
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            SIPError,
+            CryptoError,
+            EncryptionError,
+            DecryptionError,
+            KeyDerivationError,
+            ProtocolError,
+            HandshakeError,
+            RekeyError,
+            VersionNegotiationError,
+            FragmentError,
+            MessageError,
+            MessageSchemaError,
+            MessageExpiredError,
+            TransportError,
+            SIPConnectionError,
+            AdapterError,
+            AgentError,
+            CapabilityNotFoundError,
+            AgentNotAvailableError,
+            TaskError,
+            TaskTimeoutError,
+            GroupError,
+            MemberNotFoundError,
+            GroupKeyError,
+        ],
+    )
+    def test_roundtrip_preserves_all_fields(self, cls):
+        """to_dict → from_dict 往返后，所有字段必须一致且类型正确"""
+        original = cls()
+        d = original.to_dict()
+        recovered = SIPError.from_dict(d)
+
+        assert isinstance(recovered, cls), (
+            f"from_dict 返回了 {type(recovered).__name__}，期望 {cls.__name__}"
+        )
+        assert recovered.code == original.code
+        assert recovered.message == original.message
+        assert recovered.severity == original.severity
+        assert recovered.recoverable == original.recoverable
+        assert recovered.details == original.details
+
+    def test_roundtrip_with_custom_fields(self):
+        """自定义字段（severity、recoverable、details）也能正确往返"""
+        err = EncryptionError(
+            message="密钥已过期",
+            severity=ErrorSeverity.CRITICAL,
+            recoverable=False,
+            details={"algorithm": "x25519"},
+        )
+        d = err.to_dict()
+        recovered = SIPError.from_dict(d)
+
+        assert isinstance(recovered, EncryptionError)
+        assert recovered.message == "密钥已过期"
+        assert recovered.severity == ErrorSeverity.CRITICAL
+        assert recovered.recoverable is False
+        assert recovered.details == {"algorithm": "x25519"}
+

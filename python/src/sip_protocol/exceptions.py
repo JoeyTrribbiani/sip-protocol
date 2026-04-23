@@ -108,7 +108,8 @@ class EncryptionError(CryptoError):
     """加密失败"""
 
     def __init__(self, message: str = "加密失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-CRYPTO-001", **kwargs)
+        kwargs.setdefault("code", "SIP-CRYPTO-001")
+        super().__init__(message=message, **kwargs)
 
 
 @_register_error
@@ -117,7 +118,9 @@ class DecryptionError(CryptoError):
     """解密失败"""
 
     def __init__(self, message: str = "解密失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-CRYPTO-002", recoverable=False, **kwargs)
+        kwargs.setdefault("code", "SIP-CRYPTO-002")
+        kwargs.setdefault("recoverable", False)
+        super().__init__(message=message, **kwargs)
 
 
 @_register_error
@@ -126,7 +129,9 @@ class KeyDerivationError(CryptoError):
     """密钥派生失败"""
 
     def __init__(self, message: str = "密钥派生失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-CRYPTO-003", recoverable=False, **kwargs)
+        kwargs.setdefault("code", "SIP-CRYPTO-003")
+        kwargs.setdefault("recoverable", False)
+        super().__init__(message=message, **kwargs)
 
 
 # ==================== 协议层异常 ====================
@@ -148,7 +153,9 @@ class HandshakeError(ProtocolError):
     """握手失败"""
 
     def __init__(self, message: str = "握手失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-PROTO-001", recoverable=True, **kwargs)
+        kwargs.setdefault("code", "SIP-PROTO-001")
+        kwargs.setdefault("recoverable", True)
+        super().__init__(message=message, **kwargs)
 
 
 @_register_error
@@ -157,7 +164,9 @@ class RekeyError(ProtocolError):
     """密钥轮换失败"""
 
     def __init__(self, message: str = "密钥轮换失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-PROTO-002", recoverable=True, **kwargs)
+        kwargs.setdefault("code", "SIP-PROTO-002")
+        kwargs.setdefault("recoverable", True)
+        super().__init__(message=message, **kwargs)
 
 
 @_register_error
@@ -166,7 +175,8 @@ class VersionNegotiationError(ProtocolError):
     """协议版本协商失败"""
 
     def __init__(self, message: str = "协议版本协商失败", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-PROTO-003", **kwargs)
+        kwargs.setdefault("code", "SIP-PROTO-003")
+        super().__init__(message=message, **kwargs)
 
 
 @_register_error
@@ -175,7 +185,8 @@ class FragmentError(ProtocolError):
     """消息分片错误"""
 
     def __init__(self, message: str = "消息分片错误", **kwargs: Any) -> None:
-        super().__init__(message=message, code="SIP-PROTO-004", **kwargs)
+        kwargs.setdefault("code", "SIP-PROTO-004")
+        super().__init__(message=message, **kwargs)
 
 
 # ==================== 消息层异常 ====================
@@ -266,7 +277,8 @@ class CapabilityNotFoundError(AgentError):
     def __init__(self, capability: str = "", **kwargs: Any) -> None:
         msg = f"能力不存在: {capability}" if capability else "能力不存在"
         kwargs.setdefault("code", "SIP-AGENT-001")
-        super().__init__(message=msg, **kwargs)
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
 
 
 @_register_error
@@ -278,7 +290,8 @@ class AgentNotAvailableError(AgentError):
         msg = f"Agent不可用: {agent_id}" if agent_id else "Agent不可用"
         kwargs.setdefault("recoverable", True)
         kwargs.setdefault("code", "SIP-AGENT-002")
-        super().__init__(message=msg, **kwargs)
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
 
 
 @_register_error
@@ -302,7 +315,8 @@ class TaskTimeoutError(TaskError):
             msg += f" ({timeout}s)"
         kwargs.setdefault("recoverable", True)
         kwargs.setdefault("code", "SIP-AGENT-004")
-        super().__init__(message=msg, **kwargs)
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
 
 
 # ==================== 群组异常 ====================
@@ -326,7 +340,8 @@ class MemberNotFoundError(GroupError):
     def __init__(self, member_id: str = "", **kwargs: Any) -> None:
         msg = f"成员不存在: {member_id}" if member_id else "成员不存在"
         kwargs.setdefault("code", "SIP-GROUP-001")
-        super().__init__(message=msg, **kwargs)
+        kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
 
 
 @_register_error

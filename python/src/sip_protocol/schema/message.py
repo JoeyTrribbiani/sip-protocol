@@ -2,23 +2,12 @@
 
 from __future__ import annotations
 
-import time
-import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from sip_protocol.schema._utils import _generate_uuid7, _iso_now
 from sip_protocol.schema.parts import part_from_dict
 from sip_protocol.schema.types import MessageType, Priority, RecipientType
-
-
-def _generate_uuid7() -> str:
-    """生成UUID（暂用uuid4占位，后续替换为uuid7）"""
-    return str(uuid.uuid4())
-
-
-def _iso_now() -> str:
-    """返回当前UTC时间的ISO 8601格式字符串"""
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 @dataclass
