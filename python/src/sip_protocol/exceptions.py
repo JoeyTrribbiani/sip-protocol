@@ -184,3 +184,164 @@ class FragmentError(ProtocolError):
 
     def __init__(self, message: str = "消息分片错误", **kwargs: Any) -> None:
         super().__init__(message=message, code="SIP-PROTO-004", **kwargs)
+
+
+# ==================== 消息层异常 ====================
+
+
+@_register_error
+@dataclass
+class MessageError(SIPError):
+    """消息层基础异常"""
+
+    def __init__(self, message: str = "消息层错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-MSG-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class MessageSchemaError(MessageError):
+    """消息Schema验证失败"""
+
+    def __init__(self, message: str = "消息Schema验证失败", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-MSG-001")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class MessageExpiredError(MessageError):
+    """消息已过期"""
+
+    def __init__(self, message: str = "消息已过期", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-MSG-002")
+        super().__init__(message=message, **kwargs)
+
+
+# ==================== 传输层异常 ====================
+
+
+@_register_error
+@dataclass
+class TransportError(SIPError):
+    """传输层基础异常"""
+
+    def __init__(self, message: str = "传输层错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-TRANSPORT-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class SIPConnectionError(TransportError):
+    """连接失败（SIP前缀避免与内置ConnectionError冲突）"""
+
+    def __init__(self, message: str = "连接失败", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-TRANSPORT-001")
+        kwargs.setdefault("recoverable", True)
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class AdapterError(TransportError):
+    """适配器错误"""
+
+    def __init__(self, message: str = "适配器错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-TRANSPORT-002")
+        super().__init__(message=message, **kwargs)
+
+
+# ==================== Agent通信异常 ====================
+
+
+@_register_error
+@dataclass
+class AgentError(SIPError):
+    """Agent通信基础异常"""
+
+    def __init__(self, message: str = "Agent通信错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-AGENT-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class CapabilityNotFoundError(AgentError):
+    """请求的能力不存在"""
+
+    def __init__(self, capability: str = "", **kwargs: Any) -> None:
+        msg = f"能力不存在: {capability}" if capability else "能力不存在"
+        kwargs.setdefault("code", "SIP-AGENT-001")
+        super().__init__(message=msg, **kwargs)
+
+
+@_register_error
+@dataclass
+class AgentNotAvailableError(AgentError):
+    """目标Agent不可用"""
+
+    def __init__(self, agent_id: str = "", **kwargs: Any) -> None:
+        msg = f"Agent不可用: {agent_id}" if agent_id else "Agent不可用"
+        kwargs.setdefault("recoverable", True)
+        kwargs.setdefault("code", "SIP-AGENT-002")
+        super().__init__(message=msg, **kwargs)
+
+
+@_register_error
+@dataclass
+class TaskError(AgentError):
+    """任务相关错误"""
+
+    def __init__(self, message: str = "任务错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-AGENT-003")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class TaskTimeoutError(TaskError):
+    """任务超时"""
+
+    def __init__(self, task_id: str = "", timeout: float = 0, **kwargs: Any) -> None:
+        msg = f"任务超时: {task_id}" if task_id else "任务超时"
+        if timeout:
+            msg += f" ({timeout}s)"
+        kwargs.setdefault("recoverable", True)
+        kwargs.setdefault("code", "SIP-AGENT-004")
+        super().__init__(message=msg, **kwargs)
+
+
+# ==================== 群组异常 ====================
+
+
+@_register_error
+@dataclass
+class GroupError(SIPError):
+    """群组基础异常"""
+
+    def __init__(self, message: str = "群组错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-GROUP-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class MemberNotFoundError(GroupError):
+    """群组成员不存在"""
+
+    def __init__(self, member_id: str = "", **kwargs: Any) -> None:
+        msg = f"成员不存在: {member_id}" if member_id else "成员不存在"
+        kwargs.setdefault("code", "SIP-GROUP-001")
+        super().__init__(message=msg, **kwargs)
+
+
+@_register_error
+@dataclass
+class GroupKeyError(GroupError):
+    """群组密钥错误"""
+
+    def __init__(self, message: str = "群组密钥错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-GROUP-002")
+        super().__init__(message=message, **kwargs)
