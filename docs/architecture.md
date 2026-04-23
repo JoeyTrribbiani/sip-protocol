@@ -1,615 +1,214 @@
-# SIP协议架构设计
+# SIP 协议架构设计
 
-> Swarm Intelligence Protocol - 基于Signal Double Ratchet的多Agent端到端加密通信协议
-
----
-
-## 📋 目录
-
-- [概述](#概述)
-- [架构原则](#架构原则)
-- [分层架构](#分层架构)
-- [模块设计](#模块设计)
-- [依赖关系](#依赖关系)
-- [数据流](#数据流)
-- [扩展性](#扩展性)
-
----
+> Swarm Intelligence Protocol — 端到端加密的多 Agent 通信协议（TLS for Agent Communication）
 
 ## 概述
 
-SIP协议采用分层架构设计，从底层加密原语到高层应用协议，每一层都职责明确、易于维护。
+SIP 采用分层架构：从底层加密原语到高层消息结构，每一层职责明确。基于 Signal Double Ratchet，使用 XChaCha20-Poly1305 + X25519 + Triple DH。
 
-**核心设计原则：**
-- 单一职责：每个模块只负责一个功能
-- 高内聚低耦合：模块内部紧密相关，模块之间松散耦合
-- 接口稳定：对外API保持稳定，内部实现可替换
-- 可测试性：每个模块都可独立测试
+**技术栈：** Python 3.11+, stdlib dataclasses + enum, cryptography, argon2-cffi
 
----
-
-## 架构原则
-
-### 1. 分层设计
-
-```
-┌─────────────────────────────────────┐
-│        应用层（Application）          │  群组管理、会话管理
-├─────────────────────────────────────┤
-│        协议层（Protocol）            │  握手、消息、群组协议
-├─────────────────────────────────────┤
-│        加密层（Crypto）              │  DH、HKDF、AES-GCM、Argon2
-├─────────────────────────────────────┤
-│        原语层（Primitive）           │  随机数、哈希、MAC
-└─────────────────────────────────────┘
-```
-
-### 2. 模块化设计
-
-```
-src/
-├── crypto/           # 加密层（4个模块）
-│   ├── dh.js         # DH密钥交换
-│   ├── hkdf.js       # HKDF密钥派生
-│   ├── aes-gcm.js    # AES-GCM加密
-│   └── argon2.js     # PSK哈希
-├── protocol/         # 协议层（3个模块）
-│   ├── handshake.js  # 握手协议
-│   ├── message.js    # 消息协议
-│   └── group.js      # 群组协议
-└── managers/         # 管理层（3个模块）
-    ├── nonce.js      # Nonce管理器
-    ├── session.js    # 会话状态
-    └── group.js      # 群组管理器
-```
-
-### 3. 统一导出
-
-```
-src/index.js
-├── 导出crypto模块（6个函数）
-├── 导出protocol模块（9个函数）
-└── 导出managers模块（3个类）
-```
+**核心原则：**
+- 单一职责 — 每个模块/文件只负责一个功能
+- 高内聚低耦合 — 模块内部紧密，模块之间松散
+- 纯同步 API — 无 async/await，简化调用方
+- 接口稳定 — Protocol 定义抽象，实现可替换
 
 ---
 
 ## 分层架构
 
-### 1. 加密层（Crypto Layer）
-
-**职责：** 提供底层加密原语
-
-**模块：**
-- `dh.js`：X25519 ECDH密钥交换
-- `hkdf.js`：HKDF密钥派生
-- `aes-gcm.js`：AES-256-GCM加密/解密
-- `argon2.js`：Argon2id密钥哈希
-
-**特点：**
-- 无状态：纯函数，不维护状态
-- 可替换：可以更换不同的加密库
-- 性能优化：最频繁的操作在最底层
-
-### 2. 协议层（Protocol Layer）
-
-**职责：** 实现SIP协议的核心流程
-
-**模块：**
-- `handshake.js`：握手协议（三步握手）
-- `message.js`：消息加密/解密
-- `group.js`：群组加密（Double Ratchet + Skip Ratchet）
-
-**特点：**
-- 有状态：维护协议状态
-- 独立性：每个协议模块独立运行
-- 可扩展：预留扩展字段
-
-### 3. 管理层（Manager Layer）
-
-**职责：** 管理状态和资源
-
-**模块：**
-- `nonce.js`：Nonce管理器（防重放）
-- `session.js`：会话状态管理
-- `group.js`：群组管理器（成员管理）
-
-**特点：**
-- 状态管理：维护长期状态
-- 资源清理：自动清理过期资源
-- 线程安全：支持并发访问
-
----
-
-## 模块设计
-
-### Crypto模块
-
-#### dh.js
-
-```javascript
-// 输入
-privateKey: KeyObject  // 私钥
-publicKey: KeyObject   // 公钥
-
-// 输出
-sharedSecret: Buffer  // 共享密钥（32字节）
 ```
-
-**算法：** X25519 ECDH
-
-**性能：** < 10ms
-
-**安全：**
-- 使用标准X25519曲线
-- 每次密钥交换都生成新的临时密钥对
-
-#### hkdf.js
-
-```javascript
-// 输入
-ikm: Buffer     // 输入密钥材料
-salt: Buffer    // 盐（16字节）
-info: Buffer    // 上下文信息
-length: Number  // 输出长度（字节）
-
-// 输出
-key: Buffer     // 派生的密钥
-```
-
-**算法：** HKDF-SHA256
-
-**性能：** < 5ms
-
-**安全：**
-- 每次派生使用不同的盐
-- 支持多个独立的派生
-
-#### aes-gcm.js
-
-```javascript
-// 加密输入
-key: Buffer     // 加密密钥（32字节）
-plaintext: Buffer // 明文
-iv: Buffer      // 初始化向量（12字节）
-
-// 加密输出
-ciphertext: Buffer // 密文
-authTag: Buffer    // 认证标签（16字节）
-
-// 解密输入
-key: Buffer      // 解密密钥（32字节）
-ciphertext: Buffer// 密文
-iv: Buffer       // 初始化向量（12字节）
-authTag: Buffer  // 认证标签（16字节）
-
-// 解密输出
-plaintext: Buffer // 明文
-```
-
-**算法：** AES-256-GCM
-
-**性能：** < 1ms（1KB）
-
-**安全：**
-- 认证加密：同时保证机密性和完整性
-- 每次加密使用不同的IV
-- 16字节认证标签
-
-#### argon2.js
-
-```javascript
-// 输入
-psk: Buffer     // 预共享密钥
-salt: Buffer    // 盐（16字节，可选）
-
-// 输出
-pskHash: Buffer // PSK哈希（32字节）
-salt: Buffer    // 使用的盐
-```
-
-**算法：** Argon2id
-
-**参数：**
-- timeCost: 3
-- memoryCost: 64MB
-- parallelism: 4
-- hashLen: 32
-
-**安全：**
-- 抗GPU/ASIC攻击
-- 内存困难
-- 可调参数
-
----
-
-### Protocol模块
-
-#### handshake.js
-
-**流程：**
-
-```
-Agent A (发起方)              Agent B (响应方)
-    |                              |
-    |---- Handshake_Hello -------->|
-    |  (ephemeral_pub, nonce)     |
-    |                              |
-    |<--- Handshake_Auth ----------|
-    |  (ephemeral_pub, nonce)     |
-    |                              |
-    |------ Handshake_Complete ---->|
-    |  (encrypted_confirmation)    |
-    |                              |
-```
-
-**状态转换：**
-
-```
-INIT → WAIT_HELLO → WAIT_AUTH → ESTABLISHED
-```
-
-**输出：**
-- `sessionKeys`：会话密钥（encryptionKey、authKey、replayKey）
-- `sessionState`：会话状态
-
-#### message.js
-
-**消息格式：**
-
-```json
-{
-  "version": "SIP-1.0",
-  "type": "encrypted_message",
-  "sender_id": "agent-a",
-  "message_counter": 123,
-  "nonce": "base64_encoded_iv",
-  "ciphertext": "base64_encoded_ciphertext",
-  "auth_tag": "base64_encoded_auth_tag",
-  "timestamp": 1713751200000
-}
-```
-
-**验证：**
-- 版本检查
-- 消息计数器验证
-- 认证标签验证
-- 时间戳验证（±5分钟）
-
-#### group.js
-
-**Double Ratchet算法：**
-
-```
-Sending Chain:
-  chain_key_n → message_key_n, chain_key_{n+1}
-
-Receiving Chain:
-  chain_key_n → message_key_n, chain_key_{n+1}
-  (支持Skip Ratchet预先生成跳跃密钥）
-```
-
-**Skip Ratchet算法：**
-
-```
-收到消息N（期望M）：
-  for i in [M, M+1, ..., N-1]:
-    预生成跳跃密钥 skip_keys[i]
-  
-  使用 skip_keys[N] 解密消息N
-```
-
-**消息格式：**
-
-```json
-{
-  "version": "SIP-1.0",
-  "type": "group_message",
-  "timestamp": 1713751200000,
-  "sender_id": "agent-a",
-  "group_id": "group:123",
-  "message_number": 456,
-  "iv": "base64_encoded_iv",
-  "ciphertext": "base64_encoded_ciphertext",
-  "auth_tag": "base64_encoded_auth_tag",
-  "sender_signature": "base64_encoded_signature"
-}
+┌─────────────────────────────────────────────────────────────┐
+│                    传输适配器层（transport）                  │
+│     WebSocket │ OpenClaw │ Hermes │ MCP Server              │
+├─────────────────────────────────────────────────────────────┤
+│                    协议层（protocol）                        │
+│     握手 │ 消息 │ 群组 │ Rekey │ 分片 │ 恢复 │ 决策        │
+├──────────────────┬──────────────────────────────────────────┤
+│ 结构化层（schema）│          文件传输层（file_transfer）      │
+│ Envelope │ Message│  Config │ Manifest │ Store │ Manager    │
+│ 8 种 Part       │                                       │
+├──────────────────┴──────────────────────────────────────────┤
+│                    管理层（managers）                        │
+│     会话状态 │ Nonce 防重放 │ 群组成员                       │
+├─────────────────────────────────────────────────────────────┤
+│                    加密原语层（crypto）                      │
+│  XChaCha20 │ AES-GCM │ X25519 │ HKDF │ Argon2             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Manager模块
+## 混合消息模式（S1）
 
-#### nonce.js
+SIP 采用「信封 + 消息」双层结构：
 
-**职责：**
-- 生成唯一Nonce
-- 检查Nonce是否已使用
-- 防止重放攻击
-
-**数据结构：**
-
-```
-usedNonces: Set<String>
-```
-
-**策略：**
-- 生成随机Nonce（24字节）
-- 存储已使用的Nonce（Hex字符串）
-- 限制大小：最多1000个
-
-#### session.js
-
-**职责：**
-- 序列化/反序列化会话状态
-- 更新最后活动时间
-
-**数据结构：**
-
-```
-{
-  version: String,
-  agentId: String,
-  remoteAgentId: String,
-  remotePublicKey: String,
-  encryptionKey: Buffer,
-  authKey: Buffer,
-  replayKey: Buffer,
-  messageCounter: Number,
-  pskHash: Buffer,
-  salt: Buffer,
-  localNonce: Buffer,
-  remoteNonce: Buffer,
-  createdAt: Number,
-  lastActivityAt: Number
-}
+### SIPEnvelope — 加密载体
+```python
+@dataclass
+class SIPEnvelope:
+    version: str          # 协议版本
+    payload: bytes        # 加密后的密文（bytes，不解析内容）
+    content_type: str     # 顶层字段：payload 的 MIME 类型
+    content_encoding: str # 顶层字段：编码方式（如 "aes256-gcm"）
+    sender: str           # 发送者标识
+    recipient: str        # 接收者标识
+    timestamp: str        # ISO 8601 UTC
+    nonce: str            # 加密 nonce
+    session_id: str       # 会话 ID
 ```
 
-**序列化格式：**
-- JSON字符串
-- Base64编码二进制数据
-
-#### group.js
-
-**职责：**
-- 管理群组成员
-- 管理群组链密钥
-- 处理成员加入/离开
-
-**数据结构：**
-
+### SIPMessage — 结构化语义
+```python
+@dataclass
+class SIPMessage:
+    message_id: str       # UUID7
+    sender: str
+    recipient: str
+    content_type: str
+    parts: list[Part]     # 8 种 Part 类型
+    parent_id: str        # 父消息 ID（不在信封层）
+    created_at: str
+    expires_at: str
 ```
-{
-  groupId: String,
-  rootKey: Buffer,
-  members: Map<memberId, {
-    sending_chain: { chainKey, messageNumber, skipKeys },
-    receiving_chain: { chainKey, messageNumber, skipKeys }
-  }>
-}
-```
+
+### 8 种 Part 类型
+
+| Part | 用途 | 语义 |
+|------|------|------|
+| TextPart | 文本消息 | 轻量，直接内联 |
+| BinaryPart | 二进制数据 | base64 内联 |
+| FileRefPart | 文件引用 | 轻量引用，指向 manifest |
+| FileDataPart | 文件内联 | 小文件 base64 内联 |
+| AgentRefPart | Agent 引用 | 引用其他 Agent |
+| TaskPart | 任务描述 | 结构化任务信息 |
+| ControlPart | 控制指令 | 协议级控制消息 |
+| ErrorPart | 错误信息 | 结构化错误报告 |
 
 ---
 
-## 依赖关系
+## 文件传输（F1）
 
-### 模块依赖图
+### 设计策略
+- **小文件**（≤ inline_threshold，默认 4KB）→ FileDataPart（base64 内联到消息中）
+- **大文件**（> inline_threshold）→ FileRefPart（引用）+ LocalFileStore（本地存储块）
+
+### 分块流程
 
 ```
-┌─────────────┐
-│  managers/  │
-│  nonce.js   │
-│  session.js │
-│  group.js   │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  protocol/  │
-│ handshake.js│
-│  message.js │
-│  group.js   │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   crypto/   │
-│   dh.js     │
-│   hkdf.js   │
-│  aes-gcm.js │
-│  argon2.js  │
-└─────────────┘
+发送方:
+  文件 → 分块（chunk_size=1MB）→ 计算 hash → 存入 LocalFileStore → 返回 FileRefPart
+
+接收方:
+  FileRefPart → 读取 manifest → 逐块读取并校验 hash → 重组 → 写入输出路径
+```
+
+### 关键组件
+
+| 组件 | 职责 |
+|------|------|
+| FileTransferConfig | 阈值配置（inline_threshold, chunk_size, max_file_size） |
+| FileChunk + FileManifest | 块元数据 + 文件清单（序列化支持） |
+| FileStore (Protocol) | 存储接口定义 |
+| LocalFileStore | 本地文件系统实现（目录结构化、过期清理） |
+| FileTransferManager | 核心协调器（send_file, receive_file, get_progress） |
+| TransferStatus | 状态机（PENDING → SENDING → COMPLETED/FAILED/CANCELED） |
+| TransferProgress | 归一化进度追踪（0..1） |
+
+### 安全特性
+- 路径遍历防护（os.path.realpath 校验）
+- 文件名冲突自动重命名（`file.txt` → `file (2).txt`）
+- 逐块 SHA-256 hash 校验 + 整体内容 hash 校验
+- 文件大小限制（默认 5GB）
+
+---
+
+## 异常体系（P2）
+
+```
+SIPError（基类，code + message + severity + recoverable + details）
+├── CryptoError
+│   ├── EncryptionError
+│   ├── DecryptionError
+│   └── KeyDerivationError
+├── ProtocolError
+│   ├── HandshakeError
+│   ├── SessionError
+│   └── ReplayError
+├── SchemaError
+│   ├── ValidationError
+│   └── SerializationError
+├── TransportError
+│   ├── ConnectionError
+│   └── TimeoutError
+├── FileTransferError
+│   ├── ChunkIntegrityError
+│   └── FileTooLargeError
+└── GroupError
+    ├── GroupMembershipError
+    └── GroupEncryptionError
+```
+
+所有异常支持 `to_dict()` / `SIPError.from_dict()` 序列化往返。
+
+---
+
+## 模块依赖关系
+
+```
+transport/ ──→ protocol/ ──→ crypto/
+    │              │            │
+    │              └──→ managers/
+    │
+    └──→ schema/ ←── file_transfer/
+           │
+           └──→ exceptions.py（全局）
 ```
 
 **依赖规则：**
-- 上层可以调用下层
-- 下层不能调用上层
-- 同层模块可以相互调用（如protocol/group.js调用protocol/message.js）
-
-### 语言依赖
-
-**Python：**
-```
-cryptography>=41.0.0  # X25519, HKDF, AES-GCM
-argon2-cffi>=23.0.0    # Argon2id
-```
-
-**JavaScript (Node.js):**
-```
-argon2>=0.31.0  # Argon2id
-crypto           # 内置X25519, HKDF, AES-GCM
-```
+- 上层可调用下层，下层不可调用上层
+- 同层模块可相互调用（如 protocol/group → protocol/message）
+- exceptions.py 是全局叶子依赖，被所有模块引用
 
 ---
 
 ## 数据流
 
-### 握手流程
+### 加密消息发送
 
 ```
-Agent A                           Agent B
-   |                                |
-   | 1. generateKeyPair()           |
-   | 2. generateNonce()             |
-   | 3. hashPsk(psk)               |
-   |                                |
-   | -- Handshake_Hello ----------->|
-   |    { ephemeral_pub, nonce }    |
-   |                                |
-   |                    1. generateKeyPair()
-   |                    2. generateNonce()
-   |                    3. hashPsk(psk)
-   |                    4. dhExchange(priv, pub)
-   |                    5. deriveKeys()
-   |                                |
-   | <----- Handshake_Auth ---------|
-   |    { ephemeral_pub, nonce }    |
-   |                                |
-   | 4. dhExchange(priv, pub)       |
-   | 5. deriveKeys()                |
-   | 6. verifySignature()          |
-   |                                |
-   | ----- Handshake_Complete ------>|
-   |    { encrypted_confirmation }   |
-   |                                |
+SIPMessage → JSON 序列化 → bytes
+    → XChaCha20-Poly1305 加密（密文 + nonce + tag）
+    → 封装为 SIPEnvelope（payload = 密文）
+    → 传输层发送
 ```
 
-### 消息加密流程
+### 加密消息接收
 
 ```
-1. encryptMessage(encryptionKey, plaintext, senderId, counter)
-   └─> aesGCM.encrypt(key, plaintext, iv)
-       └─> { ciphertext, authTag }
-
-2. constructMessage()
-   └─> { version, sender_id, message_counter, nonce, ciphertext, auth_tag, timestamp }
-
-3. send()
-   └─> transmit(message)
+传输层接收 → SIPEnvelope
+    → nonce 重放检查（managers/nonce）
+    → XChaCha20-Poly1305 解密
+    → JSON 反序列化 → SIPMessage
 ```
 
-### 消息解密流程
+### 文件传输
 
 ```
-1. receive(message)
-   └─> validateVersion()
-       └─> validateTimestamp()
-       └─> validateCounter()
-
-2. decryptMessage(encryptionKey, message)
-   └─> aesGCM.decrypt(key, ciphertext, iv, authTag)
-       └─> plaintext
-
-3. verifySignature()
-   └─> hmac.compare_digest(expected, actual)
-```
-
-### 群组加密流程
-
-```
-1. sendGroupMessage(plaintext, senderId)
-   └─> hkdf(chainKey, "", "message-key", 32)
-       └─> messageKey
-
-2. aesGCM.encrypt(messageKey, plaintext, iv)
-   └─> { ciphertext, authTag }
-
-3. hmac(messageKey, ciphertext)
-   └─> senderSignature
-
-4. constructGroupMessage()
-   └─> { version, sender_id, group_id, message_number, iv, ciphertext, auth_tag, sender_signature }
-
-5. updateChainKey()
-   └─> hkdf(chainKey, "", "chain-key", 32)
-       └─> nextChainKey
+小文件: 文件路径 → read → base64 编码 → FileDataPart → 放入 SIPMessage.parts
+大文件: 文件路径 → 分块 + hash → LocalFileStore 存储 → FileManifest → FileRefPart
 ```
 
 ---
 
-## 扩展性
+## 设计决策记录
 
-### 1. 支持新的加密算法
-
-**修改点：** `crypto/` 目录
-
-**示例：** 添加ChaCha20-Poly1305
-
-```javascript
-// crypto/chacha20.js
-export function encryptChaCha20(key, plaintext, nonce) {
-  // 实现
-}
-
-export function decryptChaCha20(key, ciphertext, nonce) {
-  // 实现
-}
-```
-
-### 2. 支持新的协议
-
-**修改点：** `protocol/` 目录
-
-**示例：** 添加双因素认证协议
-
-```javascript
-// protocol/two-factor.js
-export function initiateTwoFactorAuth() {
-  // 实现
-}
-
-export function verifyTwoFactorAuth() {
-  // 实现
-}
-```
-
-### 3. 支持新的管理器
-
-**修改点：** `managers/` 目录
-
-**示例：** 添加密钥轮换管理器
-
-```javascript
-// managers/key-rotation.js
-export class KeyRotationManager {
-  constructor() {
-    // 实现
-  }
-
-  rotateKeys() {
-    // 实现
-  }
-}
-```
-
-### 4. 支持多语言
-
-**修改点：** 新的语言目录
-
-**示例：** 添加Go语言实现
-
-```
-go/
-├── crypto/
-├── protocol/
-└── managers/
-```
-
----
-
-## 总结
-
-SIP协议的架构设计遵循了分层、模块化、单一职责的原则，使得协议易于理解、实现和维护。
-
-**关键优势：**
-- 清晰的分层结构
-- 明确的模块划分
-- 松散的依赖关系
-- 良好的扩展性
-- 完整的测试覆盖
-
-**下一步：**
-- 完善文档体系
-- 添加更多语言支持（Go、Rust、C++）
-- 性能优化
-- 安全审计
+| 决策 | 原因 |
+|------|------|
+| SIP 定位为加密层 | 不与应用层协议（A2A/MCP）耦合，作为透明加密通道 |
+| 信封与消息分离 | 加密层只需处理 bytes payload，不解析业务语义 |
+| FileRefPart / FileDataPart 分离 | 两种语义完全不同（引用 vs 内联），不应混为一谈 |
+| 纯同步 API | 降低复杂度，调用方可自行决定是否异步包装 |
+| 纯 stdlib（无 pydantic） | 减少依赖，dataclass + enum 足够 |
+| kwargs.setdefault() 异常继承 | 避免 from_dict 反序列化时 "multiple values for keyword argument" |
