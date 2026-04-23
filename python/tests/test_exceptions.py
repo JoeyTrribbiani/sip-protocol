@@ -114,3 +114,65 @@ class TestSIPError:
     def test_can_be_raised(self):
         with pytest.raises(SIPError, match="\\[SIP-TEST-001\\]"):
             raise SIPError(code="SIP-TEST-001", message="test raise")
+
+
+from sip_protocol.exceptions import (
+    CryptoError,
+    EncryptionError,
+    DecryptionError,
+    KeyDerivationError,
+    ProtocolError,
+    HandshakeError,
+    RekeyError,
+    VersionNegotiationError,
+    FragmentError,
+)
+
+
+class TestCryptoExceptions:
+    def test_crypto_error_inherits_sip(self):
+        err = CryptoError(message="crypto fail")
+        assert isinstance(err, SIPError)
+        assert err.code == "SIP-CRYPTO-000"
+
+    def test_encryption_error(self):
+        err = EncryptionError()
+        assert err.code == "SIP-CRYPTO-001"
+        assert err.message == "加密失败"
+
+    def test_decryption_error_not_recoverable(self):
+        err = DecryptionError()
+        assert err.recoverable is False
+
+    def test_key_derivation_error_not_recoverable(self):
+        err = KeyDerivationError()
+        assert err.recoverable is False
+
+    def test_encryption_error_custom_message(self):
+        err = EncryptionError(message="密钥无效")
+        assert err.message == "密钥无效"
+        assert err.code == "SIP-CRYPTO-001"
+
+
+class TestProtocolExceptions:
+    def test_protocol_error_inherits_sip(self):
+        err = ProtocolError(message="proto fail")
+        assert isinstance(err, SIPError)
+        assert err.code == "SIP-PROTO-000"
+
+    def test_handshake_error(self):
+        err = HandshakeError()
+        assert err.code == "SIP-PROTO-001"
+        assert err.recoverable is True
+
+    def test_rekey_error(self):
+        err = RekeyError()
+        assert err.code == "SIP-PROTO-002"
+
+    def test_version_negotiation_error(self):
+        err = VersionNegotiationError(message="版本不兼容")
+        assert err.code == "SIP-PROTO-003"
+
+    def test_fragment_error(self):
+        err = FragmentError(message="分片丢失")
+        assert err.code == "SIP-PROTO-004"

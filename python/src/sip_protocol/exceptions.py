@@ -26,8 +26,12 @@ _ERROR_REGISTRY: dict[str, type[SIPError]] = {}
 
 
 def _register_error(cls: type[SIPError]) -> type[SIPError]:
-    """将异常类注册到注册表（内部装饰器）"""
-    instance = cls("", "")
+    """将异常类注册到注册表（内部装饰器）
+
+    使用默认值创建实例以提取默认 code，
+    支持带有自定义 __init__ 签名的子类。
+    """
+    instance = cls()
     _ERROR_REGISTRY[instance.code] = cls
     return cls
 
@@ -83,3 +87,100 @@ class SIPError(Exception):
             recoverable=data.get("recoverable", True),
             details=data.get("details", {}),
         )
+
+
+# ==================== 加密层异常 ====================
+
+
+@_register_error
+@dataclass
+class CryptoError(SIPError):
+    """加密层基础异常"""
+
+    def __init__(self, message: str = "加密层错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-CRYPTO-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class EncryptionError(CryptoError):
+    """加密失败"""
+
+    def __init__(self, message: str = "加密失败", **kwargs: Any) -> None:
+        super().__init__(message=message, code="SIP-CRYPTO-001", **kwargs)
+
+
+@_register_error
+@dataclass
+class DecryptionError(CryptoError):
+    """解密失败"""
+
+    def __init__(self, message: str = "解密失败", **kwargs: Any) -> None:
+        super().__init__(
+            message=message, code="SIP-CRYPTO-002", recoverable=False, **kwargs
+        )
+
+
+@_register_error
+@dataclass
+class KeyDerivationError(CryptoError):
+    """密钥派生失败"""
+
+    def __init__(self, message: str = "密钥派生失败", **kwargs: Any) -> None:
+        super().__init__(
+            message=message, code="SIP-CRYPTO-003", recoverable=False, **kwargs
+        )
+
+
+# ==================== 协议层异常 ====================
+
+
+@_register_error
+@dataclass
+class ProtocolError(SIPError):
+    """协议层基础异常"""
+
+    def __init__(self, message: str = "协议层错误", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-PROTO-000")
+        super().__init__(message=message, **kwargs)
+
+
+@_register_error
+@dataclass
+class HandshakeError(ProtocolError):
+    """握手失败"""
+
+    def __init__(self, message: str = "握手失败", **kwargs: Any) -> None:
+        super().__init__(
+            message=message, code="SIP-PROTO-001", recoverable=True, **kwargs
+        )
+
+
+@_register_error
+@dataclass
+class RekeyError(ProtocolError):
+    """密钥轮换失败"""
+
+    def __init__(self, message: str = "密钥轮换失败", **kwargs: Any) -> None:
+        super().__init__(
+            message=message, code="SIP-PROTO-002", recoverable=True, **kwargs
+        )
+
+
+@_register_error
+@dataclass
+class VersionNegotiationError(ProtocolError):
+    """协议版本协商失败"""
+
+    def __init__(self, message: str = "协议版本协商失败", **kwargs: Any) -> None:
+        super().__init__(message=message, code="SIP-PROTO-003", **kwargs)
+
+
+@_register_error
+@dataclass
+class FragmentError(ProtocolError):
+    """消息分片错误"""
+
+    def __init__(self, message: str = "消息分片错误", **kwargs: Any) -> None:
+        super().__init__(message=message, code="SIP-PROTO-004", **kwargs)
