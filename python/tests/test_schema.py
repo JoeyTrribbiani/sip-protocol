@@ -1,7 +1,7 @@
 """SIP 消息 Schema 类型系统测试"""
 
 import pytest
-from sip_protocol.schema.message import SIPMessage, create_message
+from sip_protocol.schema.message import SIPMessage, create_message, MessageOptions
 from sip_protocol.schema.parts import (
     ContextPart,
     DataPart,
@@ -127,7 +127,9 @@ class TestFileRefPart:
         assert part.mime_type == "application/octet-stream"
 
     def test_to_dict(self):
-        part = FileRefPart(url="https://x.com/f", hash="abc123", name="f.bin", size=1024, mime_type="text/plain")
+        part = FileRefPart(
+            url="https://x.com/f", hash="abc123", name="f.bin", size=1024, mime_type="text/plain"
+        )
         d = part.to_dict()
         assert d["url"] == "https://x.com/f"
         assert d["hash"] == "abc123"
@@ -136,7 +138,15 @@ class TestFileRefPart:
         assert d["mime_type"] == "text/plain"
 
     def test_from_dict(self):
-        part = FileRefPart.from_dict({"url": "http://a.com/b", "hash": "h", "name": "b", "size": 42, "mime_type": "image/png"})
+        part = FileRefPart.from_dict(
+            {
+                "url": "http://a.com/b",
+                "hash": "h",
+                "name": "b",
+                "size": 42,
+                "mime_type": "image/png",
+            }
+        )
         assert part.url == "http://a.com/b"
         assert part.hash == "h"
         assert part.name == "b"
@@ -144,7 +154,9 @@ class TestFileRefPart:
         assert part.mime_type == "image/png"
 
     def test_round_trip(self):
-        original = FileRefPart(url="ftp://f.com/g", hash="sha256", name="g.zip", size=9999, mime_type="application/zip")
+        original = FileRefPart(
+            url="ftp://f.com/g", hash="sha256", name="g.zip", size=9999, mime_type="application/zip"
+        )
         restored = FileRefPart.from_dict(original.to_dict())
         assert restored == original
 
@@ -157,7 +169,12 @@ class TestFileDataPart:
     def test_to_dict(self):
         part = FileDataPart(data="aGVsbG8=", name="hello.txt", mime_type="text/plain")
         d = part.to_dict()
-        assert d == {"type": "file_data", "data": "aGVsbG8=", "name": "hello.txt", "mime_type": "text/plain"}
+        assert d == {
+            "type": "file_data",
+            "data": "aGVsbG8=",
+            "name": "hello.txt",
+            "mime_type": "text/plain",
+        }
 
     def test_from_dict(self):
         part = FileDataPart.from_dict({"data": "abc", "name": "x", "mime_type": "text/html"})
@@ -166,7 +183,9 @@ class TestFileDataPart:
         assert part.mime_type == "text/html"
 
     def test_round_trip(self):
-        original = FileDataPart(data="YmFzZTY0", name="file.dat", mime_type="application/octet-stream")
+        original = FileDataPart(
+            data="YmFzZTY0", name="file.dat", mime_type="application/octet-stream"
+        )
         restored = FileDataPart.from_dict(original.to_dict())
         assert restored == original
 
@@ -188,7 +207,9 @@ class TestToolRequestPart:
         assert d == {"type": "tool_request", "call_id": "c2", "name": "calc", "arguments": {"x": 1}}
 
     def test_from_dict(self):
-        part = ToolRequestPart.from_dict({"call_id": "c3", "name": "echo", "arguments": {"msg": "hi"}})
+        part = ToolRequestPart.from_dict(
+            {"call_id": "c3", "name": "echo", "arguments": {"msg": "hi"}}
+        )
         assert part.call_id == "c3"
         assert part.name == "echo"
         assert part.arguments == {"msg": "hi"}
@@ -292,7 +313,9 @@ class TestStreamPart:
         assert "total_chunks" not in d
 
     def test_from_dict(self):
-        part = StreamPart.from_dict({"chunk_index": 2, "total_chunks": 5, "is_final": False, "data": "x"})
+        part = StreamPart.from_dict(
+            {"chunk_index": 2, "total_chunks": 5, "is_final": False, "data": "x"}
+        )
         assert part.chunk_index == 2
         assert part.total_chunks == 5
         assert part.is_final is False
@@ -419,8 +442,11 @@ class TestSIPMessageToDict:
 
     def test_optional_fields_included_when_set(self):
         msg = SIPMessage(
-            sender_id="alice", parent_id="p1", task_id="t1",
-            recipient_id="bob", recipient_group="team-a",
+            sender_id="alice",
+            parent_id="p1",
+            task_id="t1",
+            recipient_id="bob",
+            recipient_group="team-a",
         )
         d = msg.to_dict()
         assert d["parent_id"] == "p1"
@@ -454,9 +480,15 @@ class TestSIPMessageToDict:
 class TestSIPMessageFromDict:
     def test_basic_deserialization(self):
         data = {
-            "id": "msg-1", "conversation_id": "conv-1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "alice", "recipient_type": "direct",
-            "timestamp": "2025-01-01T00:00:00Z", "parts": [], "metadata": {},
+            "id": "msg-1",
+            "conversation_id": "conv-1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "alice",
+            "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [],
+            "metadata": {},
         }
         msg = SIPMessage.from_dict(data)
         assert msg.id == "msg-1"
@@ -466,10 +498,15 @@ class TestSIPMessageFromDict:
 
     def test_parts_deserialized(self):
         data = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "direct",
             "timestamp": "2025-01-01T00:00:00Z",
-            "parts": [{"type": "text", "text": "hi"}], "metadata": {},
+            "parts": [{"type": "text", "text": "hi"}],
+            "metadata": {},
         }
         msg = SIPMessage.from_dict(data)
         assert len(msg.parts) == 1
@@ -478,11 +515,18 @@ class TestSIPMessageFromDict:
 
     def test_optional_fields_deserialized(self):
         data = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "task_delegate", "sender_id": "a",
-            "recipient_type": "group", "recipient_group": "dev-team",
-            "parent_id": "p1", "task_id": "t1",
-            "timestamp": "2025-01-01T00:00:00Z", "parts": [], "metadata": {},
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "task_delegate",
+            "sender_id": "a",
+            "recipient_type": "group",
+            "recipient_group": "dev-team",
+            "parent_id": "p1",
+            "task_id": "t1",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [],
+            "metadata": {},
         }
         msg = SIPMessage.from_dict(data)
         assert msg.parent_id == "p1"
@@ -493,7 +537,8 @@ class TestSIPMessageFromDict:
 
     def test_round_trip(self):
         original = SIPMessage(
-            sender_id="alice", recipient_id="bob",
+            sender_id="alice",
+            recipient_id="bob",
             parts=[TextPart(text="hello")],
             metadata={"priority": "high", "ttl": 60, "custom": {"key": "val"}},
         )
@@ -520,30 +565,33 @@ class TestCreateMessage:
         assert len(msg.parts) == 2
 
     def test_with_priority(self):
-        msg = create_message(sender_id="alice", priority=Priority.URGENT)
+        msg = create_message(sender_id="alice", options=MessageOptions(priority=Priority.URGENT))
         assert msg.metadata["priority"] == "urgent"
 
     def test_with_ttl(self):
-        msg = create_message(sender_id="alice", ttl=300)
+        msg = create_message(sender_id="alice", options=MessageOptions(ttl=300))
         assert msg.metadata["ttl"] == 300
 
     def test_with_reply_to(self):
-        msg = create_message(sender_id="alice", reply_to="msg-123")
+        msg = create_message(sender_id="alice", options=MessageOptions(reply_to="msg-123"))
         assert msg.metadata["reply_to"] == "msg-123"
 
     def test_with_custom_metadata(self):
-        msg = create_message(sender_id="alice", custom_metadata={"source": "cli"})
+        msg = create_message(sender_id="alice", options=MessageOptions(custom_metadata={"source": "cli"}))
         assert msg.metadata["custom"]["source"] == "cli"
 
     def test_group_message(self):
-        msg = create_message(sender_id="alice", recipient_type=RecipientType.GROUP, recipient_group="dev")
+        msg = create_message(
+            sender_id="alice", recipient_type=RecipientType.GROUP, recipient_group="dev"
+        )
         assert msg.recipient_type == RecipientType.GROUP
         assert msg.recipient_group == "dev"
 
     def test_task_delegate_message(self):
         msg = create_message(
-            sender_id="alice", recipient_id="bob",
-            message_type=MessageType.TASK_DELEGATE, task_id="task-1",
+            sender_id="alice",
+            recipient_id="bob",
+            options=MessageOptions(message_type=MessageType.TASK_DELEGATE, task_id="task-1"),
         )
         assert msg.message_type == MessageType.TASK_DELEGATE
         assert msg.task_id == "task-1"
@@ -568,9 +616,14 @@ class TestCreateMessage:
 class TestValidateMessage:
     def test_valid_message(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
-            "recipient_id": "b", "timestamp": "2025-01-01T00:00:00Z",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "direct",
+            "recipient_id": "b",
+            "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
         errors = validate_message(msg)
@@ -584,17 +637,26 @@ class TestValidateMessage:
 
     def test_empty_parts(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
-            "timestamp": "2025-01-01T00:00:00Z", "parts": [],
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "direct",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "parts": [],
         }
         errors = validate_message(msg)
         assert any("parts must not be empty" in e for e in errors)
 
     def test_direct_without_recipient_id(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "direct",
             "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
@@ -603,8 +665,12 @@ class TestValidateMessage:
 
     def test_group_without_recipient_group(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "group",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "group",
             "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
@@ -613,8 +679,12 @@ class TestValidateMessage:
 
     def test_broadcast_no_extra_requirement(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "broadcast",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "broadcast",
             "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
@@ -624,9 +694,14 @@ class TestValidateMessage:
 
     def test_valid_direct_message(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "direct",
-            "recipient_id": "b", "timestamp": "2025-01-01T00:00:00Z",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "direct",
+            "recipient_id": "b",
+            "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
         errors = validate_message(msg)
@@ -634,9 +709,14 @@ class TestValidateMessage:
 
     def test_valid_group_message(self):
         msg = {
-            "id": "m1", "conversation_id": "c1", "schema": "sip-msg/v1",
-            "message_type": "text", "sender_id": "a", "recipient_type": "group",
-            "recipient_group": "dev-team", "timestamp": "2025-01-01T00:00:00Z",
+            "id": "m1",
+            "conversation_id": "c1",
+            "schema": "sip-msg/v1",
+            "message_type": "text",
+            "sender_id": "a",
+            "recipient_type": "group",
+            "recipient_group": "dev-team",
+            "timestamp": "2025-01-01T00:00:00Z",
             "parts": [{"type": "text", "text": "hi"}],
         }
         errors = validate_message(msg)
@@ -659,9 +739,14 @@ class TestValidateParts:
 
     def test_all_valid_types(self):
         valid = [
-            {"type": "text"}, {"type": "data"}, {"type": "file_ref"},
-            {"type": "file_data"}, {"type": "tool_request"},
-            {"type": "tool_response"}, {"type": "context"}, {"type": "stream"},
+            {"type": "text"},
+            {"type": "data"},
+            {"type": "file_ref"},
+            {"type": "file_data"},
+            {"type": "tool_request"},
+            {"type": "tool_response"},
+            {"type": "context"},
+            {"type": "stream"},
         ]
         errors = validate_parts(valid)
         assert errors == []

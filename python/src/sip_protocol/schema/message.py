@@ -80,38 +80,46 @@ class SIPMessage:
         )
 
 
+@dataclass
+class MessageOptions:
+    """消息创建选项（用于 create_message 的可选参数分组）"""
+
+    message_type: MessageType = MessageType.TEXT
+    task_id: str | None = None
+    parent_id: str | None = None
+    priority: Priority = Priority.NORMAL
+    ttl: int = 0
+    reply_to: str | None = None
+    custom_metadata: dict[str, Any] | None = None
+
+
 def create_message(
     sender_id: str,
     recipient_type: str | RecipientType = RecipientType.DIRECT,
     parts: list[Any] | None = None,
     recipient_id: str | None = None,
     recipient_group: str | None = None,
-    parent_id: str | None = None,
-    message_type: MessageType = MessageType.TEXT,
-    task_id: str | None = None,
-    priority: Priority = Priority.NORMAL,
-    ttl: int = 0,
-    reply_to: str | None = None,
-    custom_metadata: dict[str, Any] | None = None,
+    options: MessageOptions | None = None,
 ) -> SIPMessage:
     """创建SIP消息（带合理默认值）"""
     if parts is None:
         parts = []
+    opts = options or MessageOptions()
     metadata: dict[str, Any] = {
-        "priority": priority.value,
-        "ttl": ttl,
-        "custom": custom_metadata or {},
+        "priority": opts.priority.value,
+        "ttl": opts.ttl,
+        "custom": opts.custom_metadata or {},
     }
-    if reply_to is not None:
-        metadata["reply_to"] = reply_to
+    if opts.reply_to is not None:
+        metadata["reply_to"] = opts.reply_to
     return SIPMessage(
         sender_id=sender_id,
         recipient_id=recipient_id,
         recipient_group=recipient_group,
         recipient_type=recipient_type,
         parts=parts,
-        parent_id=parent_id,
-        message_type=message_type,
-        task_id=task_id,
+        parent_id=opts.parent_id,
+        message_type=opts.message_type,
+        task_id=opts.task_id,
         metadata=metadata,
     )

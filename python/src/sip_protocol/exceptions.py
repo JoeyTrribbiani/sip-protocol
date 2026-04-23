@@ -117,9 +117,7 @@ class DecryptionError(CryptoError):
     """解密失败"""
 
     def __init__(self, message: str = "解密失败", **kwargs: Any) -> None:
-        super().__init__(
-            message=message, code="SIP-CRYPTO-002", recoverable=False, **kwargs
-        )
+        super().__init__(message=message, code="SIP-CRYPTO-002", recoverable=False, **kwargs)
 
 
 @_register_error
@@ -128,9 +126,7 @@ class KeyDerivationError(CryptoError):
     """密钥派生失败"""
 
     def __init__(self, message: str = "密钥派生失败", **kwargs: Any) -> None:
-        super().__init__(
-            message=message, code="SIP-CRYPTO-003", recoverable=False, **kwargs
-        )
+        super().__init__(message=message, code="SIP-CRYPTO-003", recoverable=False, **kwargs)
 
 
 # ==================== 协议层异常 ====================
@@ -152,9 +148,7 @@ class HandshakeError(ProtocolError):
     """握手失败"""
 
     def __init__(self, message: str = "握手失败", **kwargs: Any) -> None:
-        super().__init__(
-            message=message, code="SIP-PROTO-001", recoverable=True, **kwargs
-        )
+        super().__init__(message=message, code="SIP-PROTO-001", recoverable=True, **kwargs)
 
 
 @_register_error
@@ -163,9 +157,7 @@ class RekeyError(ProtocolError):
     """密钥轮换失败"""
 
     def __init__(self, message: str = "密钥轮换失败", **kwargs: Any) -> None:
-        super().__init__(
-            message=message, code="SIP-PROTO-002", recoverable=True, **kwargs
-        )
+        super().__init__(message=message, code="SIP-PROTO-002", recoverable=True, **kwargs)
 
 
 @_register_error

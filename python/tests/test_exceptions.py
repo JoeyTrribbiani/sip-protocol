@@ -220,6 +220,7 @@ class TestTransportExceptions:
     def test_connection_error_does_not_shadow_builtin(self):
         """SIPConnectionError不应隐藏Python内置ConnectionError"""
         import builtins
+
         assert SIPConnectionError is not builtins.ConnectionError
         assert issubclass(SIPConnectionError, Exception)
 
@@ -275,14 +276,30 @@ class TestErrorRegistry:
         from sip_protocol.exceptions import _ERROR_REGISTRY
 
         expected = {
-            "SIP-ERROR-000", "SIP-CRYPTO-000", "SIP-CRYPTO-001",
-            "SIP-CRYPTO-002", "SIP-CRYPTO-003", "SIP-PROTO-000",
-            "SIP-PROTO-001", "SIP-PROTO-002", "SIP-PROTO-003",
-            "SIP-PROTO-004", "SIP-MSG-000", "SIP-MSG-001",
-            "SIP-MSG-002", "SIP-TRANSPORT-000", "SIP-TRANSPORT-001",
-            "SIP-TRANSPORT-002", "SIP-AGENT-000", "SIP-AGENT-001",
-            "SIP-AGENT-002", "SIP-AGENT-003", "SIP-AGENT-004",
-            "SIP-GROUP-000", "SIP-GROUP-001", "SIP-GROUP-002",
+            "SIP-ERROR-000",
+            "SIP-CRYPTO-000",
+            "SIP-CRYPTO-001",
+            "SIP-CRYPTO-002",
+            "SIP-CRYPTO-003",
+            "SIP-PROTO-000",
+            "SIP-PROTO-001",
+            "SIP-PROTO-002",
+            "SIP-PROTO-003",
+            "SIP-PROTO-004",
+            "SIP-MSG-000",
+            "SIP-MSG-001",
+            "SIP-MSG-002",
+            "SIP-TRANSPORT-000",
+            "SIP-TRANSPORT-001",
+            "SIP-TRANSPORT-002",
+            "SIP-AGENT-000",
+            "SIP-AGENT-001",
+            "SIP-AGENT-002",
+            "SIP-AGENT-003",
+            "SIP-AGENT-004",
+            "SIP-GROUP-000",
+            "SIP-GROUP-001",
+            "SIP-GROUP-002",
         }
         assert set(_ERROR_REGISTRY.keys()) == expected
 

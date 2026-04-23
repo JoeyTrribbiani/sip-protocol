@@ -4,7 +4,7 @@
 """
 
 from sip_protocol.schema.envelope import SIPEnvelope
-from sip_protocol.schema.message import SIPMessage, create_message
+from sip_protocol.schema.message import SIPMessage, MessageOptions, create_message
 from sip_protocol.schema.parts import (
     ContextPart,
     DataPart,
@@ -42,6 +42,7 @@ __all__ = [
     "part_from_dict",
     # 消息与工厂
     "SIPMessage",
+    "MessageOptions",
     "create_message",
     # 验证
     "validate_message",

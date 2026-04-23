@@ -12,8 +12,14 @@ def validate_message(msg: dict[str, Any]) -> list[str]:
     """
     errors: list[str] = []
     required_fields = (
-        "id", "conversation_id", "schema", "message_type",
-        "sender_id", "recipient_type", "timestamp", "parts",
+        "id",
+        "conversation_id",
+        "schema",
+        "message_type",
+        "sender_id",
+        "recipient_type",
+        "timestamp",
+        "parts",
     )
     for field_name in required_fields:
         if field_name not in msg:
@@ -39,8 +45,14 @@ def validate_parts(parts: list[dict[str, Any]]) -> list[str]:
     if not parts:
         return ["parts must not be empty"]
     valid_types = {
-        "text", "data", "file_ref", "file_data",
-        "tool_request", "tool_response", "context", "stream",
+        "text",
+        "data",
+        "file_ref",
+        "file_data",
+        "tool_request",
+        "tool_response",
+        "context",
+        "stream",
     }
     for part in parts:
         part_type = part.get("type", "")

@@ -29,9 +29,9 @@ class TestEnvelopeDefaults:
 
     def test_no_parent_id_attribute(self):
         env = SIPEnvelope()
-        assert not hasattr(env, "parent_id"), (
-            "SIPEnvelope 不应有 parent_id — 消息引用关系属于 SIPMessage"
-        )
+        assert not hasattr(
+            env, "parent_id"
+        ), "SIPEnvelope 不应有 parent_id — 消息引用关系属于 SIPMessage"
 
     def test_timestamp_format(self):
         env = SIPEnvelope()
