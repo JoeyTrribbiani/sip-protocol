@@ -127,7 +127,9 @@ def create_version_offer(supported_versions: List[str], sender_id: str) -> dict:
     }
 
 
-def parse_version_response(data: dict, local_supported: Optional[List[str]] = None) -> Optional[str]:
+def parse_version_response(
+    data: dict, local_supported: Optional[List[str]] = None
+) -> Optional[str]:
     """解析版本协商响应，返回协商结果版本
 
     Args:
