@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 新增
 
+#### 能力发现（S2 + S4）
+- **AgentCard**（src/sip_protocol/discovery/agent_card.py）
+  - 自描述数据结构：Capabilities（frozen）、Skill、AuthScheme（frozen）、Endpoints（frozen）
+  - AgentRegistration 注册记录
+  - to_dict / from_dict 递归序列化往返
+- **AgentRegistry**（src/sip_protocol/discovery/registry.py）
+  - 注册/注销/查询/心跳续约，内存 + SQLite 双写
+  - AgentFilter 按技能/标签/能力/状态过滤查询（OR 语义）
+  - check_health 过期标记 offline，cleanup 清理超期离线记录
+  - RegistryConfig 可配置 TTL/心跳间隔/离线保留时间
+- **RegistryStore**（src/sip_protocol/discovery/registry_store.py）
+  - SQLite 持久化层，参数化查询，零 SQL 注入风险
+  - find_expired / find_offline_expired 支持定时清理
+
 #### SIP 混合 Schema（S1）
 - **SIPEnvelope**（src/sip_protocol/schema/envelope.py）
   - 加密载体数据类，payload 为 bytes，content_type + content_encoding 顶层字段
