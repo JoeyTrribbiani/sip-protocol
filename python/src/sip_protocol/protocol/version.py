@@ -127,17 +127,26 @@ def create_version_offer(supported_versions: List[str], sender_id: str) -> dict:
     }
 
 
-def parse_version_response(data: dict) -> Optional[str]:
+def parse_version_response(data: dict, local_supported: Optional[List[str]] = None) -> Optional[str]:
     """解析版本协商响应，返回协商结果版本
 
+    Args:
+        data: 版本协商响应消息
+        local_supported: 本地支持的版本列表（用于验证对方选择是否合法）
+            若提供，则验证 selected_version 是否在本机支持范围内
+
     Returns:
-        协商后的版本，无共同版本返回 None
+        协商后的版本，无共同版本或验证失败返回 None
     """
     if data.get("type") != "version_response":
         return None
     selected = data.get("selected_version", "")
-    supported = data.get("supported_versions", [])
-    return negotiate_version(supported, [selected])
+    if not selected:
+        return None
+    # 若提供本地版本列表，验证所选版本在本机支持范围内
+    if local_supported is not None and selected not in local_supported:
+        return None
+    return selected
 
 
 def create_version_not_supported(supported: List[str], remote_supported: List[str]) -> dict:

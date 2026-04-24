@@ -18,8 +18,9 @@ from ..crypto.hkdf import hkdf
 def _secure_wipe(data: bytearray) -> None:
     """安全擦除内存中的密钥数据（尽力而为）
 
-    Python 的 del 和变量覆盖不保证内存清零。
-    使用 ctypes.memset 提供尽力擦除。
+    注意：此函数仅对 bytearray 类型有效。
+    对 bytes 类型（不可变），Python 无法保证内存清零，
+    调用方应知晓此限制。
 
     Args:
         data: 需要擦除的 bytearray（就地修改）
@@ -323,12 +324,11 @@ class RekeyManager:
         Args:
             new_keys: 新密钥字典
         """
-        # 安全擦除旧密钥
+        # 安全擦除旧密钥（仅对 bytearray 有效，bytes 不可变无法擦除）
         for key_name in ("encryption_key", "auth_key", "replay_key"):
             old_val = self.session_state.get(key_name)
-            if old_val and isinstance(old_val, (bytes, bytearray)):
-                buf = bytearray(old_val)
-                _secure_wipe(buf)
+            if old_val and isinstance(old_val, bytearray):
+                _secure_wipe(old_val)
 
         # 更新会话密钥
         self.session_state["encryption_key"] = new_keys["encryption_key"]

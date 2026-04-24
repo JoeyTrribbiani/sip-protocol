@@ -150,3 +150,17 @@ class TestInitializeGroupChains:
         alice_send = chains["alice"]["sending_chain"]
         msg, new_chain = mgr.send_group_message("test", alice_send, "alice")
         assert new_chain["chain_key"] != alice_send["chain_key"]
+
+
+class TestStaleMessageRejection:
+    def test_receive_stale_message_raises(self):
+        """接收过期的消息号应抛出 ValueError"""
+        mgr = _make_manager()
+        send_chain = {"chain_key": b"init" * 8, "message_number": 0}
+        msg0, _ = mgr.send_group_message("m0", send_chain, "alice")
+
+        recv_chain = {"chain_key": b"init" * 8, "message_number": 0, "skip_keys": {}}
+        _, recv_chain = mgr.receive_group_message(msg0, recv_chain, "alice")
+        # recv_chain.message_number is now 1，重新接收 msg0 应被拒绝
+        with pytest.raises(ValueError, match="重复或过期"):
+            mgr.receive_group_message(msg0, recv_chain, "alice")

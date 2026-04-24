@@ -604,16 +604,21 @@ class GroupManager:
         chain_key = receiving_chain["chain_key"]
         expected_num = receiving_chain["message_number"]
 
+        # 回退检查：拒绝重复或过期的消息
+        if message_number < expected_num:
+            raise ValueError(f"重复或过期消息: 收到 {message_number}，期望 >= {expected_num}")
+
         # Skip Ratchet：处理乱序消息
         skip_keys = receiving_chain.get("skip_keys", {})
         for missing_num in range(expected_num, message_number):
-            if missing_num in skip_keys:
-                chain_key = hkdf(chain_key, b"", b"skip-key", CHAIN_KEY_LENGTH)
-                del skip_keys[missing_num]
-            else:
+            if missing_num not in skip_keys:
+                # 非预生成路径：派生 skip_key 供后续延迟解密
                 message_key = hkdf(chain_key, b"", b"message-key", MESSAGE_KEY_LENGTH)
                 skip_keys[missing_num] = hkdf(chain_key, b"", b"skip-key", CHAIN_KEY_LENGTH)
-                chain_key = hkdf(chain_key, b"", b"chain-key", CHAIN_KEY_LENGTH)
+            else:
+                del skip_keys[missing_num]
+            # 两条路径统一用 "chain-key" 推进，保证 chain_key 一致性
+            chain_key = hkdf(chain_key, b"", b"chain-key", CHAIN_KEY_LENGTH)
 
         # 派生当前消息的 message_key
         message_key = hkdf(chain_key, b"", b"message-key", MESSAGE_KEY_LENGTH)

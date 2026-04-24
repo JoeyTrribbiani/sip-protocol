@@ -45,9 +45,24 @@ class TestVersionResponse:
         assert parse_version_response(resp) is None
 
     def test_parse_version_response_no_common_version(self):
+        """对方选择的版本不在本机列表时返回 None（需传 local_supported）"""
         resp = create_version_response("SIP-1.0", ["SIP-2.0"], "agent-b")
-        result = parse_version_response(resp)
+        # 不传 local_supported 时，仅返回 selected_version
+        assert parse_version_response(resp) == "SIP-1.0"
+        # 传入 local_supported 时，验证返回 None
+        assert parse_version_response(resp, local_supported=["SIP-2.0"]) is None
+
+    def test_parse_version_response_local_validation_rejects_unsupported(self):
+        """本地版本验证：对方选择的版本不在本机支持列表时返回 None"""
+        resp = create_version_response("SIP-1.3", ["SIP-1.3"], "agent-b")
+        result = parse_version_response(resp, local_supported=["SIP-1.0", "SIP-1.1"])
         assert result is None
+
+    def test_parse_version_response_local_validation_accepts(self):
+        """本地版本验证：对方选择的版本在本机支持列表时返回该版本"""
+        resp = create_version_response("SIP-1.1", ["SIP-1.1"], "agent-b")
+        result = parse_version_response(resp, local_supported=["SIP-1.0", "SIP-1.1"])
+        assert result == "SIP-1.1"
 
 
 class TestVersionNotSupported:
@@ -82,7 +97,8 @@ class TestFullNegotiationFlow:
         assert selected == "SIP-1.3"
 
     def test_no_common_version_returns_none(self):
-        offer = create_version_offer(["SIP-1.0"], "agent-a")
-        response = create_version_response("SIP-1.0", ["SIP-2.0"], "agent-b")
-        result = parse_version_response(response)
+        """发起方本地不支持对方选择的版本时返回 None"""
+        # 响应方选择了 SIP-2.0，但发起方只支持 SIP-1.0
+        response = create_version_response("SIP-2.0", ["SIP-2.0"], "agent-b")
+        result = parse_version_response(response, local_supported=["SIP-1.0"])
         assert result is None
