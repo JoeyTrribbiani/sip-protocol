@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sip_protocol.discovery.agent_card import AgentCard
+from sip_protocol.discovery.registry_store import RegistryStore
 
 
 # ==================== 配置 ====================
@@ -57,11 +58,12 @@ class AgentRegistration:
 
 
 class AgentRegistry:
-    """Agent注册中心 — 内存版本"""
+    """Agent注册中心 — 内存 + SQLite 双写"""
 
-    def __init__(self, config: RegistryConfig | None = None):
+    def __init__(self, config: RegistryConfig | None = None) -> None:
         self._config = config or RegistryConfig()
         self._store: dict[str, AgentRegistration] = {}
+        self._store_db = RegistryStore(self._config.db_path)
 
     # === 注册/注销 ===
 
@@ -81,6 +83,7 @@ class AgentRegistry:
             expires_at=now + self._config.default_ttl,
         )
         self._store[card.name] = reg
+        self._store_db.save(reg)
         return card.name
 
     def deregister(self, agent_name: str) -> bool:
@@ -88,6 +91,7 @@ class AgentRegistry:
         if agent_name not in self._store:
             return False
         del self._store[agent_name]
+        self._store_db.delete(agent_name)
         return True
 
     # === 查询 ===
@@ -154,6 +158,9 @@ class AgentRegistry:
         now = time.time()
         reg.last_heartbeat = now
         reg.expires_at = now + self._config.default_ttl
+        self._store_db.update_status(
+            agent_name, "online", reg.expires_at, reg.last_heartbeat,
+        )
         return True
 
     def check_health(self) -> list[str]:
@@ -165,6 +172,12 @@ class AgentRegistry:
                 reg.status = "offline"
                 reg.offline_since = now
                 unhealthy.append(reg.agent_name)
+        for name in unhealthy:
+            reg = self._store[name]
+            self._store_db.update_status(
+                name, "offline", reg.expires_at, reg.last_heartbeat,
+                reg.offline_since,
+            )
         return unhealthy
 
     # === 维护 ===
@@ -172,6 +185,15 @@ class AgentRegistry:
     def cleanup(self) -> int:
         """清理过期Agent，返回清理数量"""
         now = time.time()
+
+        # 先从SQLite查找离线超时的Agent，同步到内存
+        expired_offline = self._store_db.find_offline_expired(
+            self._config.offline_ttl, now,
+        )
+        for reg in expired_offline:
+            self._store.pop(reg.agent_name, None)
+
+        # 再从内存查找并同步删除到SQLite
         to_remove: list[str] = []
         for name, reg in self._store.items():
             if reg.status == "offline" and reg.offline_since is not None:
@@ -179,4 +201,12 @@ class AgentRegistry:
                     to_remove.append(name)
         for name in to_remove:
             del self._store[name]
-        return len(to_remove)
+            self._store_db.delete(name)
+        return len(to_remove) + len(expired_offline)
+
+    def load_from_store(self) -> int:
+        """从SQLite加载注册记录到内存，返回加载数量"""
+        registrations = self._store_db.list_all()
+        for reg in registrations:
+            self._store[reg.agent_name] = reg
+        return len(registrations)
