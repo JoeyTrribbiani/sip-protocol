@@ -2,6 +2,7 @@
 
 from sip_protocol.discovery.agent_card import (
     AgentCard,
+    AgentRegistration,
     AuthScheme,
     Capabilities,
     Endpoints,
@@ -10,7 +11,6 @@ from sip_protocol.discovery.agent_card import (
 from sip_protocol.discovery.registry import (
     AgentFilter,
     AgentRegistry,
-    AgentRegistration,
     RegistryConfig,
 )
 

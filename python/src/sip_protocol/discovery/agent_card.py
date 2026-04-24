@@ -179,9 +179,7 @@ class AgentCard:
     def from_dict(cls, data: dict[str, Any]) -> AgentCard:
         """递归从字典反序列化"""
         caps = Capabilities.from_dict(data.get("capabilities", {}))
-        auth_list = [
-            AuthScheme.from_dict(a) for a in data.get("authentication", [])
-        ]
+        auth_list = [AuthScheme.from_dict(a) for a in data.get("authentication", [])]
         skill_list = [Skill.from_dict(s) for s in data.get("skills", [])]
         endpoints_data = data.get("endpoints")
         endpoints = Endpoints.from_dict(endpoints_data) if endpoints_data else None
@@ -196,3 +194,16 @@ class AgentCard:
             endpoints=endpoints,
             metadata=data.get("metadata", {}),
         )
+
+
+@dataclass
+class AgentRegistration:
+    """注册记录"""
+
+    agent_name: str
+    card: AgentCard
+    status: str  # "online" | "offline"
+    registered_at: float
+    last_heartbeat: float
+    expires_at: float
+    offline_since: float | None = None

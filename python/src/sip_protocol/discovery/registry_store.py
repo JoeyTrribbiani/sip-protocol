@@ -6,12 +6,8 @@ import json
 import os
 import sqlite3
 import time
-from typing import TYPE_CHECKING, Any
 
-from sip_protocol.discovery.agent_card import AgentCard
-
-if TYPE_CHECKING:
-    from sip_protocol.discovery.registry import AgentRegistration
+from sip_protocol.discovery.agent_card import AgentCard, AgentRegistration
 
 
 class RegistryStore:
@@ -57,20 +53,23 @@ class RegistryStore:
     def save(self, registration: AgentRegistration) -> None:
         """保存注册记录（INSERT OR REPLACE）"""
         conn = self._get_conn()
-        conn.execute("""
+        conn.execute(
+            """
             INSERT OR REPLACE INTO agents
                 (agent_name, card_json, status, registered_at,
                  last_heartbeat, expires_at, offline_since)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            registration.agent_name,
-            json.dumps(registration.card.to_dict(), ensure_ascii=False),
-            registration.status,
-            registration.registered_at,
-            registration.last_heartbeat,
-            registration.expires_at,
-            registration.offline_since,
-        ))
+        """,
+            (
+                registration.agent_name,
+                json.dumps(registration.card.to_dict(), ensure_ascii=False),
+                registration.status,
+                registration.registered_at,
+                registration.last_heartbeat,
+                registration.expires_at,
+                registration.offline_since,
+            ),
+        )
         conn.commit()
 
     def load(self, agent_name: str) -> AgentRegistration | None:
@@ -110,12 +109,15 @@ class RegistryStore:
     ) -> bool:
         """更新状态"""
         conn = self._get_conn()
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             UPDATE agents
             SET status = ?, expires_at = ?,
                 last_heartbeat = ?, offline_since = ?
             WHERE agent_name = ?
-        """, (status, expires_at, last_heartbeat, offline_since, agent_name))
+        """,
+            (status, expires_at, last_heartbeat, offline_since, agent_name),
+        )
         conn.commit()
         return cursor.rowcount > 0
 
@@ -124,10 +126,13 @@ class RegistryStore:
         if now is None:
             now = time.time()
         conn = self._get_conn()
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT * FROM agents
             WHERE status = 'online' AND expires_at < ?
-        """, (now,)).fetchall()
+        """,
+            (now,),
+        ).fetchall()
         return [self._row_to_registration(row) for row in rows]
 
     def find_offline_expired(
@@ -140,18 +145,19 @@ class RegistryStore:
             now = time.time()
         cutoff = now - offline_ttl
         conn = self._get_conn()
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT * FROM agents
             WHERE status = 'offline'
                 AND offline_since IS NOT NULL
                 AND offline_since < ?
-        """, (cutoff,)).fetchall()
+        """,
+            (cutoff,),
+        ).fetchall()
         return [self._row_to_registration(row) for row in rows]
 
     def _row_to_registration(self, row: sqlite3.Row) -> AgentRegistration:
         """将数据库行转换为AgentRegistration"""
-        from sip_protocol.discovery.registry import AgentRegistration
-
         card_dict = json.loads(row["card_json"])
         return AgentRegistration(
             agent_name=row["agent_name"],

@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import time
-import uuid
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from sip_protocol.discovery.agent_card import AgentCard
+from sip_protocol.discovery.agent_card import AgentCard, AgentRegistration
 from sip_protocol.discovery.registry_store import RegistryStore
-
 
 # ==================== 配置 ====================
 
@@ -18,11 +15,11 @@ from sip_protocol.discovery.registry_store import RegistryStore
 class RegistryConfig:
     """注册中心配置"""
 
-    default_ttl: int = 300           # 默认在线TTL（秒）
-    heartbeat_interval: int = 120    # 心跳间隔（秒）
-    offline_ttl: int = 86400         # 离线保留时间（秒）
+    default_ttl: int = 300  # 默认在线TTL（秒）
+    heartbeat_interval: int = 120  # 心跳间隔（秒）
+    offline_ttl: int = 86400  # 离线保留时间（秒）
     db_path: str = "~/.openclaw/sip_registry.db"
-    cleanup_interval: int = 3600     # 清理间隔（秒）
+    cleanup_interval: int = 3600  # 清理间隔（秒）
 
 
 # ==================== 查询过滤 ====================
@@ -36,22 +33,6 @@ class AgentFilter:
     tags: list[str] | None = None
     capabilities: list[str] | None = None
     status: str | None = None
-
-
-# ==================== 注册记录 ====================
-
-
-@dataclass
-class AgentRegistration:
-    """注册记录"""
-
-    agent_name: str
-    card: AgentCard
-    status: str                    # "online" | "offline"
-    registered_at: float
-    last_heartbeat: float
-    expires_at: float
-    offline_since: float | None = None
 
 
 # ==================== 注册中心 ====================
@@ -84,7 +65,7 @@ class AgentRegistry:
         )
         self._store[card.name] = reg
         self._store_db.save(reg)
-        return card.name
+        return str(card.name)
 
     def deregister(self, agent_name: str) -> bool:
         """注销Agent，返回是否成功"""
@@ -159,7 +140,10 @@ class AgentRegistry:
         reg.last_heartbeat = now
         reg.expires_at = now + self._config.default_ttl
         self._store_db.update_status(
-            agent_name, "online", reg.expires_at, reg.last_heartbeat,
+            agent_name,
+            "online",
+            reg.expires_at,
+            reg.last_heartbeat,
         )
         return True
 
@@ -175,7 +159,10 @@ class AgentRegistry:
         for name in unhealthy:
             reg = self._store[name]
             self._store_db.update_status(
-                name, "offline", reg.expires_at, reg.last_heartbeat,
+                name,
+                "offline",
+                reg.expires_at,
+                reg.last_heartbeat,
                 reg.offline_since,
             )
         return unhealthy
@@ -185,24 +172,31 @@ class AgentRegistry:
     def cleanup(self) -> int:
         """清理过期Agent，返回清理数量"""
         now = time.time()
+        deleted: set[str] = set()
 
-        # 先从SQLite查找离线超时的Agent，同步到内存
+        # 先从SQLite查找离线超时的Agent，同步清理内存和SQLite
         expired_offline = self._store_db.find_offline_expired(
-            self._config.offline_ttl, now,
+            self._config.offline_ttl,
+            now,
         )
         for reg in expired_offline:
             self._store.pop(reg.agent_name, None)
+            self._store_db.delete(reg.agent_name)
+            deleted.add(reg.agent_name)
 
         # 再从内存查找并同步删除到SQLite
-        to_remove: list[str] = []
-        for name, reg in self._store.items():
-            if reg.status == "offline" and reg.offline_since is not None:
-                if now - reg.offline_since > self._config.offline_ttl:
-                    to_remove.append(name)
-        for name in to_remove:
-            del self._store[name]
-            self._store_db.delete(name)
-        return len(to_remove) + len(expired_offline)
+        for name, reg in list(self._store.items()):
+            if (
+                reg.status == "offline"
+                and reg.offline_since is not None
+                and now - reg.offline_since > self._config.offline_ttl
+                and name not in deleted
+            ):
+                del self._store[name]
+                self._store_db.delete(name)
+                deleted.add(name)
+
+        return len(deleted)
 
     def load_from_store(self) -> int:
         """从SQLite加载注册记录到内存，返回加载数量"""
@@ -210,3 +204,7 @@ class AgentRegistry:
         for reg in registrations:
             self._store[reg.agent_name] = reg
         return len(registrations)
+
+    def close(self) -> None:
+        """关闭SQLite连接"""
+        self._store_db.close()
