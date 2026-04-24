@@ -127,7 +127,7 @@ def verify_session_resume(message: Dict, auth_key: bytes) -> bool:
         bool: 是否有效
     """
     # 构建期望的数据
-    data = f"{message['session_id']}:{message['message_counter']}".encode()
+    data = f"{message['sender_id']}:{message['message_counter']}".encode()
 
     # 计算期望的签名
     expected_sig = hmac.new(auth_key, data, hashlib.sha256).digest()
