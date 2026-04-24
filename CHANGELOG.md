@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-25
+
 ### 修复
 
 #### 协议修复（P3）
@@ -72,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - TransferProgress 进度追踪
 - **文件传输异常**（追加到 exceptions.py）
   - FileTransferError, ChunkIntegrityError, FileTooLargeError
+
+### 统计
+
+- 测试：630 passed, 36 skipped
+- 覆盖率：83%
+- Pylint：10.00/10
+- Black：通过
+- MyPy：0 errors
 
 ## [1.3.0] - 2026-04-22
 
