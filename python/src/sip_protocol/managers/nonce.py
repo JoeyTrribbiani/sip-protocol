@@ -15,7 +15,7 @@ class NonceManager:
     使用OrderedDict保证FIFO淘汰顺序
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.used_nonces: OrderedDict[bytes, None] = OrderedDict()
 
     def generate_nonce(self) -> bytes:

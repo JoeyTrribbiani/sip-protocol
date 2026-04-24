@@ -142,7 +142,7 @@ def parse_version_response(
     """
     if data.get("type") != "version_response":
         return None
-    selected = data.get("selected_version", "")
+    selected: str = data.get("selected_version", "")
     if not selected:
         return None
     # 若提供本地版本列表，验证所选版本在本机支持范围内
