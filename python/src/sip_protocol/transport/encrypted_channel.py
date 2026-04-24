@@ -459,8 +459,13 @@ class EncryptedChannel:
         if not self._stats["established_at"]:
             return
 
-        # 按消息数量检查
+        # 按发送消息数量检查
         if self._send_counter >= self.config.rekey_after_messages:
+            self._initiate_rekey()
+            return
+
+        # 按接收消息数量检查
+        if self._recv_counter >= self.config.rekey_after_messages:
             self._initiate_rekey()
             return
 

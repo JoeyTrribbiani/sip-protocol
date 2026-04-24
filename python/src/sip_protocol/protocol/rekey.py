@@ -13,6 +13,21 @@ from cryptography.hazmat.primitives import serialization
 from ..crypto.dh import generate_keypair, dh_exchange
 from ..crypto.hkdf import hkdf
 
+
+def _secure_wipe(data: bytearray) -> None:
+    """安全擦除内存中的密钥数据（尽力而为）
+
+    Python 的 del 和变量覆盖不保证内存清零。
+    使用 ctypes.memset 提供尽力擦除。
+
+    Args:
+        data: 需要擦除的 bytearray（就地修改）
+    """
+    import ctypes
+    n = len(data)
+    ctypes.memset(ctypes.addressof((ctypes.c_char * n).from_buffer(data)), 0, n)
+
+
 REKEY_NONCE_LENGTH = 16
 PROTOCOL_VERSION = "SIP-1.0"
 
@@ -308,6 +323,13 @@ class RekeyManager:
         Args:
             new_keys: 新密钥字典
         """
+        # 安全擦除旧密钥
+        for key_name in ("encryption_key", "auth_key", "replay_key"):
+            old_val = self.session_state.get(key_name)
+            if old_val and isinstance(old_val, (bytes, bytearray)):
+                buf = bytearray(old_val)
+                _secure_wipe(buf)
+
         # 更新会话密钥
         self.session_state["encryption_key"] = new_keys["encryption_key"]
         self.session_state["auth_key"] = new_keys["auth_key"]
