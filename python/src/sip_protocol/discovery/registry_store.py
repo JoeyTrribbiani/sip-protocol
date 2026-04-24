@@ -21,6 +21,9 @@ class RegistryStore:
     def _get_conn(self) -> sqlite3.Connection:
         """获取数据库连接（延迟创建）"""
         if self._conn is None:
+            parent = os.path.dirname(self._db_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
             self._conn = sqlite3.connect(self._db_path)
             self._conn.row_factory = sqlite3.Row
             self._init_db()
