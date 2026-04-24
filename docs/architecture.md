@@ -202,6 +202,26 @@ SIPMessage → JSON 序列化 → bytes
 
 ---
 
+## 协议加固（P3）
+
+针对 e2ee-protocol.md 设计文档的 10 项差距，完成以下修复：
+
+### 安全修复
+- **Handshake** — 删除 `complete_handshake` 中重复的三重 DH 计算
+- **Resume** — 签名数据绑定 `message["sender_id"]`，与验证函数一致
+- **Nonce** — `set` 改为 `OrderedDict`，保证 FIFO 淘汰顺序
+
+### 加密加固
+- **群组 Double Ratchet** — `chain_key` 每条消息推进（`HKDF("message-key")` → `HKDF("chain-key")`），确保前向保密
+- **Skip Ratchet** — 乱序消息统一用 `chain-key` 标签推进 chain_key，非预生成路径存储 skip_key 供延迟解密
+- **Rekey** — 旧密钥通过 `ctypes.memset` 安全擦除（bytearray 类型），接收端计数器触发轮换检查
+- **Rekey 闭环** — `process_rekey_response` / `handle_rekey_request` / `get_pending_rekey_request` 方法补全 request→response→apply 流程
+
+### 功能补全
+- **版本协商** — 4 步协议：`create_version_offer` → `create_version_response` → `parse_version_response`（含 `local_supported` 验证）
+
+---
+
 ## 设计决策记录
 
 | 决策 | 原因 |

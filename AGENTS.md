@@ -51,10 +51,10 @@ sip-protocol/
 |------|------|
 | `handshake.py` | 三重 DH 握手协议 |
 | `message.py` | 加密消息构建与解析 |
-| `group.py` | 群组 Double Ratchet + Skip Ratchet |
-| `rekey.py` | 密钥轮换 |
-| `resume.py` | 连接恢复 |
-| `version.py` | 协议版本协商（SIP-1.0 ~ SIP-1.3） |
+| `group.py` | 群组 Double Ratchet + Skip Ratchet（chain_key 推进 + 乱序处理） |
+| `rekey.py` | 密钥轮换（request→response→apply 闭环 + _secure_wipe） |
+| `resume.py` | 连接恢复（签名绑定 sender_id） |
+| `version.py` | 协议版本协商 4 步协议（offer→response→parse→validate） |
 | `fragment.py` | 大消息分片与重组 |
 | `decision.py` | 集体决策引擎（提案/投票） |
 | `persistence.py` | SQLite 消息持久化 |
@@ -89,7 +89,7 @@ sip-protocol/
 | 文件 | 职责 |
 |------|------|
 | `session.py` | 会话状态管理（序列化/反序列化/过期检查） |
-| `nonce.py` | Nonce 管理器（防重放攻击） |
+| `nonce.py` | Nonce 管理器（OrderedDict FIFO 淘汰，防重放攻击） |
 | `group.py` | 群组成员管理（加入/离开） |
 - **依赖：** 无业务依赖
 - **被依赖：** protocol/
@@ -98,7 +98,7 @@ sip-protocol/
 | 文件 | 职责 |
 |------|------|
 | `base.py` | TransportAdapter 抽象基类 |
-| `encrypted_channel.py` | 加密通道（完整生命周期管理） |
+| `encrypted_channel.py` | 加密通道（生命周期管理 + Rekey 闭环 + 接收端触发） |
 | `message.py` | Agent 消息格式（TEXT/ENCRYPTED/CONTROL） |
 | `openclaw_adapter.py` | OpenClaw CLI 适配器 |
 | `hermes_claude_adapter.py` | Hermes ↔ Claude Code 适配器 |

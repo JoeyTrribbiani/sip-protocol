@@ -104,7 +104,7 @@ manager.receive_file(part, "/output/path/report.pdf")
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | `crypto/` | ✅ 完成 | XChaCha20-Poly1305, AES-256-GCM, X25519, HKDF, Argon2 |
-| `protocol/` | ✅ 完成 | Triple DH 握手、消息加密、群组 Double Ratchet、Rekey |
+| `protocol/` | ✅ 完成 | Triple DH 握手、群组 Double Ratchet + Skip Ratchet、Rekey 闭环、版本协商 |
 | `managers/` | ✅ 完成 | 会话状态、Nonce 防重放、群组成员 |
 | `schema/` | ✅ 完成（S1） | SIPEnvelope + SIPMessage 混合模式、8 种 Part 类型 |
 | `file_transfer/` | ✅ 完成（F1） | 分块存储、FileRefPart/FileDataPart 引用策略 |
@@ -119,7 +119,7 @@ manager.receive_file(part, "/output/path/report.pdf")
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 553 passed, 36 skipped |
+| 测试用例 | 582 passed, 36 skipped |
 | 覆盖率 | 82% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |
@@ -130,8 +130,9 @@ manager.receive_file(part, "/output/path/report.pdf")
 ## 安全
 
 - **端到端加密** — XChaCha20-Poly1305（主）+ AES-256-GCM（备选）
-- **前向保密** — Signal Double Ratchet + Triple DH
-- **抗重放** — Nonce + Replay Tag
+- **前向保密** — Signal Double Ratchet（chain_key 推进）+ Skip Ratchet（乱序处理）+ Triple DH
+- **密钥轮换** — Rekey 闭环（request → response → apply）+ 旧密钥安全擦除
+- **抗重放** — Nonce FIFO 淘汰 + Replay Tag
 - **抗篡改** — AEAD 认证标签
 - **中间人防护** — PSK (Argon2id) 验证
 - **时序攻击防护** — 恒定时间比较
