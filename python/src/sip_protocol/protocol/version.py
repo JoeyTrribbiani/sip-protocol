@@ -2,6 +2,7 @@
 协议版本协商模块
 """
 
+import time
 from typing import List, Optional
 
 PROTOCOL_VERSIONS = ["SIP-1.0", "SIP-1.1", "SIP-1.2", "SIP-1.3"]
@@ -113,3 +114,62 @@ def is_backward_compatible(old_version: str, new_version: str) -> bool:
         return False
 
     return new_minor >= old_minor
+
+
+def create_version_offer(supported_versions: List[str], sender_id: str) -> dict:
+    """创建版本协商提议消息"""
+    return {
+        "version": DEFAULT_VERSION,
+        "type": "version_offer",
+        "timestamp": int(time.time() * 1000),
+        "sender_id": sender_id,
+        "supported_versions": supported_versions,
+    }
+
+
+def parse_version_response(data: dict, local_supported: Optional[List[str]] = None) -> Optional[str]:
+    """解析版本协商响应，返回协商结果版本
+
+    Args:
+        data: 版本协商响应消息
+        local_supported: 本地支持的版本列表（用于验证对方选择是否合法）
+            若提供，则验证 selected_version 是否在本机支持范围内
+
+    Returns:
+        协商后的版本，无共同版本或验证失败返回 None
+    """
+    if data.get("type") != "version_response":
+        return None
+    selected = data.get("selected_version", "")
+    if not selected:
+        return None
+    # 若提供本地版本列表，验证所选版本在本机支持范围内
+    if local_supported is not None and selected not in local_supported:
+        return None
+    return selected
+
+
+def create_version_not_supported(supported: List[str], remote_supported: List[str]) -> dict:
+    """创建版本不支持的错误消息"""
+    return {
+        "version": DEFAULT_VERSION,
+        "type": "error",
+        "error_code": "VERSION_NOT_SUPPORTED",
+        "error_message": f"No common version. Supported: {supported}",
+        "timestamp": int(time.time() * 1000),
+        "remote_versions": remote_supported,
+    }
+
+
+def create_version_response(
+    selected_version: str, supported_versions: List[str], sender_id: str
+) -> dict:
+    """创建版本协商响应消息"""
+    return {
+        "version": selected_version,
+        "type": "version_response",
+        "timestamp": int(time.time() * 1000),
+        "sender_id": sender_id,
+        "selected_version": selected_version,
+        "supported_versions": supported_versions,
+    }

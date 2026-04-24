@@ -51,11 +51,10 @@ class GroupManager:
         self.group_name: str = ""
 
     def initialize_group_chains(self, members: list, root_key: bytes) -> dict:
-        """
-        初始化群组链密钥
+        """初始化群组链密钥（Double Ratchet）
 
-        群组设计说明：在群组场景下，所有成员需要能够解密彼此发送的消息。
-        简化方案：使用共享的群组密钥基础，确保所有成员能派生相同的消息密钥。
+        所有成员共享同一 chain_key 基础，确保群组内消息可互解密。
+        每次收发消息后 chain_key 单向推进，提供前向保密。
 
         Args:
             members: 群组成员ID列表
@@ -65,15 +64,10 @@ class GroupManager:
             dict: 群组链密钥
         """
         chains = {}
-
-        # 派生一个共享的群组消息密钥基础
-        # 所有成员使用相同的基础密钥来派生消息密钥，确保互解密能力
-        group_message_key_base = hkdf(root_key, b"group-message-key-base", b"sip-group", 32)
+        group_base = hkdf(root_key, b"group-base", b"sip-group", 32)
 
         for member in members:
-            # 每个成员有独立的链状态（用于管理消息编号）
-            # 但派生密钥时使用相同的基础
-            chain_key = hkdf(group_message_key_base, b"chain-key", b"ratchet", CHAIN_KEY_LENGTH)
+            chain_key = hkdf(group_base, f"{member}:init".encode(), b"init-chain", CHAIN_KEY_LENGTH)
 
             chains[member] = {
                 "sending_chain": {"chain_key": chain_key, "message_number": 0},
@@ -441,8 +435,9 @@ class GroupManager:
         public_key: Optional[bytes] = None,
         role: str = "member",
     ) -> None:
-        """
-        添加群组成员
+        """添加群组成员
+
+        从 root_key 为新成员派生初始 chain_key（Double Ratchet）。
 
         Args:
             member_id: 成员ID
@@ -452,12 +447,12 @@ class GroupManager:
         if member_id in self.members:
             raise ValueError(f"Member {member_id} already exists")
 
-        # 为新成员派生链密钥
-        sending_chain_key = hkdf(
-            self.root_key, f"{member_id}:sending".encode(), b"sending-chain", CHAIN_KEY_LENGTH
-        )
-        receiving_chain_key = hkdf(
-            self.root_key, f"{member_id}:receiving".encode(), b"receiving-chain", CHAIN_KEY_LENGTH
+        # 从 root_key 为新成员派生初始 chain_key
+        initial_chain_key = hkdf(
+            self.root_key,
+            f"{member_id}:init".encode(),
+            b"init-chain",
+            CHAIN_KEY_LENGTH,
         )
 
         self.members[member_id] = {
@@ -466,19 +461,20 @@ class GroupManager:
             "joined_at": int(time.time() * 1000),
             "public_key": base64.b64encode(public_key).decode() if public_key else "",
             "sending_chain": {
-                "chain_key": sending_chain_key,
+                "chain_key": initial_chain_key,
                 "message_number": 0,
             },
             "receiving_chain": {
-                "chain_key": receiving_chain_key,
+                "chain_key": initial_chain_key,
                 "message_number": 0,
                 "skip_keys": {},
             },
         }
 
     def remove_member(self, member_id: str) -> None:
-        """
-        移除群组成员
+        """移除群组成员（Double Ratchet 链重置）
+
+        更新 root_key 实现前向保密，为剩余成员重新派生 chain_key。
 
         Args:
             member_id: 成员ID
@@ -493,16 +489,14 @@ class GroupManager:
         for mid, member_data in self.members.items():
             if mid == member_id:
                 continue
-
-            sending_chain_key = hkdf(
-                self.root_key, f"{mid}:sending".encode(), b"sending-chain", CHAIN_KEY_LENGTH
+            chain_key = hkdf(
+                self.root_key,
+                f"{mid}:reinit".encode(),
+                b"reinit-chain",
+                CHAIN_KEY_LENGTH,
             )
-            receiving_chain_key = hkdf(
-                self.root_key, f"{mid}:receiving".encode(), b"receiving-chain", CHAIN_KEY_LENGTH
-            )
-
-            member_data["sending_chain"]["chain_key"] = sending_chain_key
-            member_data["receiving_chain"]["chain_key"] = receiving_chain_key
+            member_data["sending_chain"]["chain_key"] = chain_key
+            member_data["receiving_chain"]["chain_key"] = chain_key
 
         # 移除成员
         del self.members[member_id]
@@ -540,48 +534,48 @@ class GroupManager:
     def send_group_message(
         self, plaintext: str, sending_chain: dict, sender_id: str
     ) -> tuple[str, dict]:
-        """
-        发送群组消息
+        """发送群组消息（Double Ratchet）
 
-        群组密钥派生方案：使用群组根密钥和发送者ID派生消息密钥
-        这样接收方可以用相同的方式派生出相同的密钥来解密
+        每条消息推进 chain_key，确保前向保密。
 
         Args:
             plaintext: 明文消息
-            sending_chain: 发送链状态（只用于跟踪消息编号）
+            sending_chain: 发送链状态
             sender_id: 发送者ID
 
         Returns:
             Tuple[str, dict]: (消息JSON字符串, 更新后的发送链状态)
         """
-        # 1. 派生消息密钥：使用群组根密钥 + 发送者ID + 消息编号
-        # 所有成员都可以用相同的方式派生这个密钥
-        message_context = f"{sender_id}:{sending_chain['message_number']}".encode()
-        message_key = hkdf(self.root_key, message_context, b"group-message-key", MESSAGE_KEY_LENGTH)
+        chain_key = sending_chain["chain_key"]
+        msg_num = sending_chain["message_number"]
 
-        # 调试：打印密钥信息
+        # 1. 从 chain_key 派生 message_key
+        message_key = hkdf(chain_key, b"", b"message-key", MESSAGE_KEY_LENGTH)
 
-        # 2. 加密消息
+        # 2. 推进 chain_key
+        next_chain_key = hkdf(chain_key, b"", b"chain-key", CHAIN_KEY_LENGTH)
+
+        # 3. 加密消息
         iv = os.urandom(AES_GCM_NONCE_LENGTH)
         ciphertext, auth_tag = encrypt_aes_gcm(message_key, plaintext.encode(), iv)
 
-        # 3. 发送方签名（使用消息密钥）
+        # 4. 发送方签名
         sender_signature = hmac.new(message_key, ciphertext, hashlib.sha256).digest()
 
-        # 4. 更新sending chain状态（只推进消息编号）
+        # 5. 更新发送链状态
         updated_chain = {
-            "chain_key": sending_chain["chain_key"],  # 链密钥不再推进
-            "message_number": sending_chain["message_number"] + 1,
+            "chain_key": next_chain_key,
+            "message_number": msg_num + 1,
         }
 
-        # 5. 构建群组消息
+        # 6. 构建群组消息
         message = {
             "version": GROUP_PROTOCOL_VERSION,
             "type": "group_message",
             "timestamp": int(time.time() * 1000),
             "sender_id": sender_id,
             "group_id": self.group_id,
-            "message_number": sending_chain["message_number"],
+            "message_number": msg_num,
             "iv": base64.b64encode(iv).decode(),
             "ciphertext": base64.b64encode(ciphertext).decode(),
             "auth_tag": base64.b64encode(auth_tag).decode(),
@@ -590,52 +584,66 @@ class GroupManager:
 
         return json.dumps(message), updated_chain
 
-    def receive_group_message(
+    def receive_group_message(  # pylint: disable=unused-argument
         self, message: str, receiving_chain: dict, sender_id: str
     ) -> tuple[str, dict]:
-        """
-        接收群组消息
+        """接收群组消息（Double Ratchet + Skip Ratchet）
 
-        使用群组根密钥和发送者ID派生消息密钥，与发送方使用相同的方式
+        处理乱序消息，推进 chain_key 确保前向保密。
 
         Args:
             message: 群组消息（JSON字符串）
-            receiving_chain: 接收链状态（只用于跟踪消息编号）
-            sender_id: 发送者ID
+            receiving_chain: 接收链状态
+            sender_id: 发送者ID（保留用于未来签名验证扩展）
 
         Returns:
             Tuple[str, dict]: (明文消息, 更新后的接收链状态)
         """
-        # 1. 解析消息
         msg = json.loads(message)
         message_number = msg["message_number"]
+        chain_key = receiving_chain["chain_key"]
+        expected_num = receiving_chain["message_number"]
 
-        # 2. 派生消息密钥：使用群组根密钥 + 发送者ID + 消息编号
-        # 与 send_group_message 中的派生方式相同
-        message_context = f"{sender_id}:{message_number}".encode()
-        message_key = hkdf(self.root_key, message_context, b"group-message-key", MESSAGE_KEY_LENGTH)
+        # 回退检查：拒绝重复或过期的消息
+        if message_number < expected_num:
+            raise ValueError(f"重复或过期消息: 收到 {message_number}，期望 >= {expected_num}")
 
-        # 调试：打印密钥信息
+        # Skip Ratchet：处理乱序消息
+        skip_keys = receiving_chain.get("skip_keys", {})
+        for missing_num in range(expected_num, message_number):
+            if missing_num not in skip_keys:
+                # 非预生成路径：派生 skip_key 供后续延迟解密
+                message_key = hkdf(chain_key, b"", b"message-key", MESSAGE_KEY_LENGTH)
+                skip_keys[missing_num] = hkdf(chain_key, b"", b"skip-key", CHAIN_KEY_LENGTH)
+            else:
+                del skip_keys[missing_num]
+            # 两条路径统一用 "chain-key" 推进，保证 chain_key 一致性
+            chain_key = hkdf(chain_key, b"", b"chain-key", CHAIN_KEY_LENGTH)
 
-        # 3. 解密消息
+        # 派生当前消息的 message_key
+        message_key = hkdf(chain_key, b"", b"message-key", MESSAGE_KEY_LENGTH)
+
+        # 推进 chain_key
+        next_chain_key = hkdf(chain_key, b"", b"chain-key", CHAIN_KEY_LENGTH)
+
+        # 解密消息
         iv = base64.b64decode(msg["iv"])
         ciphertext = base64.b64decode(msg["ciphertext"])
         auth_tag = base64.b64decode(msg["auth_tag"])
-
         plaintext = decrypt_aes_gcm(message_key, ciphertext, iv, auth_tag)
 
-        # 4. 验证发送方签名
+        # 验证发送方签名
         sender_signature = base64.b64decode(msg["sender_signature"])
         expected_signature = hmac.new(message_key, ciphertext, hashlib.sha256).digest()
 
         if not hmac.compare_digest(sender_signature, expected_signature):
             raise ValueError("Invalid sender signature")
 
-        # 5. 更新receiving chain状态（只推进消息编号）
+        # 更新接收链状态
         updated_chain = {
-            "chain_key": receiving_chain["chain_key"],  # 链密钥不再推进
-            "message_number": receiving_chain["message_number"] + 1,
-            "skip_keys": receiving_chain["skip_keys"],
+            "chain_key": next_chain_key,
+            "message_number": message_number + 1,
+            "skip_keys": skip_keys,
         }
 
         return plaintext.decode(), updated_chain

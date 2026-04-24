@@ -94,12 +94,6 @@ def create_session_resume_message(
         else session_state.auth_key
     )
 
-    # 构建消息数据
-    data = f"{session_state.session_id}:{next_message_counter}".encode()
-
-    # 生成HMAC签名
-    signature = hmac.new(auth_key, data, hashlib.sha256).digest()
-
     # 构建消息
     message = {
         "version": "SIP-1.0",
@@ -109,8 +103,12 @@ def create_session_resume_message(
         "recipient_id": session_state.partner_id,
         "session_id": session_state.session_id,
         "message_counter": next_message_counter,
-        "signature": base64.b64encode(signature).decode(),
     }
+
+    # 签名数据绑定 sender_id（而非 session_id），与 verify_session_resume 一致
+    data = f"{message['sender_id']}:{next_message_counter}".encode()
+    signature = hmac.new(auth_key, data, hashlib.sha256).digest()
+    message["signature"] = base64.b64encode(signature).decode()
 
     return message
 
@@ -127,7 +125,7 @@ def verify_session_resume(message: Dict, auth_key: bytes) -> bool:
         bool: 是否有效
     """
     # 构建期望的数据
-    data = f"{message['session_id']}:{message['message_counter']}".encode()
+    data = f"{message['sender_id']}:{message['message_counter']}".encode()
 
     # 计算期望的签名
     expected_sig = hmac.new(auth_key, data, hashlib.sha256).digest()

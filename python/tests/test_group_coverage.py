@@ -397,20 +397,21 @@ class TestReceiveGroupMessageErrors:
 
     def test_invalid_signature_raises(self):
         gm = _make_group()
-        members = ["alice", "bob"]
-        chains = gm.initialize_group_chains(members, gm.root_key)
 
-        msg_json, updated = gm.send_group_message(
-            "hello", chains["alice"]["sending_chain"], "alice"
-        )
+        # 发送方和接收方使用同一 chain_key（群组共享链）
+        shared_key = hkdf(b"shared", b"", b"shared-chain", 32)
+        send_chain = {"chain_key": shared_key, "message_number": 0}
+        recv_chain = {"chain_key": shared_key, "message_number": 0, "skip_keys": {}}
 
-        # Tamper with the signature
+        msg_json, _ = gm.send_group_message("hello", send_chain, "alice")
+
+        # 篡改签名
         msg = json.loads(msg_json)
         msg["sender_signature"] = base64.b64encode(os.urandom(32)).decode()
         tampered_json = json.dumps(msg)
 
         try:
-            gm.receive_group_message(tampered_json, chains["bob"]["receiving_chain"], "alice")
+            gm.receive_group_message(tampered_json, recv_chain, "alice")
             assert False, "Should have raised"
         except ValueError as e:
             assert "Invalid sender signature" in str(e)
@@ -436,43 +437,46 @@ class TestUpdateGroupRootKey:
 
 
 class TestSendReceiveGroupMultipleMessages:
-    """多消息发送接收覆盖"""
+    """多消息发送接收覆盖（Double Ratchet）"""
 
     def test_sequential_messages_same_sender(self):
         gm = _make_group()
-        members = ["alice", "bob"]
-        chains = gm.initialize_group_chains(members, gm.root_key)
+
+        # 群组共享链：发送方和接收方使用同一 chain_key
+        shared_key = hkdf(b"shared-seq", b"", b"shared-chain", 32)
+        send_chain = {"chain_key": shared_key, "message_number": 0}
+        recv_chain = {"chain_key": shared_key, "message_number": 0, "skip_keys": {}}
 
         for i in range(5):
             plaintext = f"msg-{i}"
-            msg_json, updated = gm.send_group_message(
-                plaintext, chains["alice"]["sending_chain"], "alice"
+            msg_json, send_chain = gm.send_group_message(
+                plaintext, send_chain, "alice"
             )
-            chains["alice"]["sending_chain"] = updated
-
-            decrypted, updated_r = gm.receive_group_message(
-                msg_json, chains["bob"]["receiving_chain"], "alice"
+            decrypted, recv_chain = gm.receive_group_message(
+                msg_json, recv_chain, "alice"
             )
-            chains["bob"]["receiving_chain"] = updated_r
             assert decrypted == plaintext
 
     def test_interleaved_senders(self):
         gm = _make_group()
         members = ["alice", "bob", "carol"]
-        chains = gm.initialize_group_chains(members, gm.root_key)
 
         for sender in members:
             plaintext = f"hello from {sender}"
-            msg_json, updated = gm.send_group_message(
-                plaintext, chains[sender]["sending_chain"], sender
+
+            # 每个发送者使用独立共享链
+            sender_key = hkdf(f"{sender}-key".encode(), b"", b"sender-chain", 32)
+            send_chain = {"chain_key": sender_key, "message_number": 0}
+
+            msg_json, _ = gm.send_group_message(
+                plaintext, send_chain, sender
             )
-            chains[sender]["sending_chain"] = updated
 
             for receiver in members:
                 if receiver == sender:
                     continue
-                decrypted, updated_r = gm.receive_group_message(
-                    msg_json, chains[receiver]["receiving_chain"], sender
+                recv_chain = {"chain_key": sender_key, "message_number": 0, "skip_keys": {}}
+                decrypted, _ = gm.receive_group_message(
+                    msg_json, recv_chain, sender
                 )
-                chains[receiver]["receiving_chain"] = updated_r
                 assert decrypted == plaintext

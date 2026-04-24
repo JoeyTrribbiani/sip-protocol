@@ -4,6 +4,7 @@ Nonce管理器模块
 """
 
 import os
+from collections import OrderedDict
 
 NONCE_LENGTH = 24
 
@@ -11,10 +12,11 @@ NONCE_LENGTH = 24
 class NonceManager:
     """
     Nonce管理器
+    使用OrderedDict保证FIFO淘汰顺序
     """
 
     def __init__(self):
-        self.used_nonces = set()
+        self.used_nonces: OrderedDict[bytes, None] = OrderedDict()
 
     def generate_nonce(self) -> bytes:
         """
@@ -26,7 +28,7 @@ class NonceManager:
         nonce = os.urandom(NONCE_LENGTH)
         while nonce in self.used_nonces:
             nonce = os.urandom(NONCE_LENGTH)
-        self.used_nonces.add(nonce)
+        self.used_nonces[nonce] = None
         return nonce
 
     def check_and_add(self, nonce: bytes) -> bool:
@@ -41,9 +43,9 @@ class NonceManager:
         """
         if nonce in self.used_nonces:
             return False
-        self.used_nonces.add(nonce)
+        self.used_nonces[nonce] = None
         if len(self.used_nonces) > 1000:
-            self.used_nonces.pop()
+            self.used_nonces.popitem(last=False)
         return True
 
     def validate_nonce(self, nonce: bytes) -> bool:

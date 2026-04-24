@@ -235,14 +235,6 @@ def complete_handshake(handshake_auth: dict, agent_state: dict):
     # shared_3: ephemeral_local × remote_ephemeral
     shared_3 = dh_exchange(agent_state["ephemeral_private_key"], remote_ephemeral_pub)
 
-    # 三重DH密钥交换（发起方视角）
-    # shared_1: identity_local × remote_ephemeral
-    shared_1 = dh_exchange(agent_state["identity_private_key"], remote_ephemeral_pub)
-    # shared_2: ephemeral_local × remote_identity
-    shared_2 = dh_exchange(agent_state["ephemeral_private_key"], remote_identity_pub)
-    # shared_3: ephemeral_local × remote_ephemeral
-    shared_3 = dh_exchange(agent_state["ephemeral_private_key"], remote_ephemeral_pub)
-
     # PSK哈希
     psk_hash, _ = hash_psk(agent_state["psk"])
 

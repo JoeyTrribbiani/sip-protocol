@@ -3,6 +3,7 @@ Rekey密钥轮换模块
 实现密钥轮换流程（前向保密）
 """
 
+import ctypes
 import os
 import time
 import hmac
@@ -12,6 +13,21 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization
 from ..crypto.dh import generate_keypair, dh_exchange
 from ..crypto.hkdf import hkdf
+
+
+def _secure_wipe(data: bytearray) -> None:
+    """安全擦除内存中的密钥数据（尽力而为）
+
+    注意：此函数仅对 bytearray 类型有效。
+    对 bytes 类型（不可变），Python 无法保证内存清零，
+    调用方应知晓此限制。
+
+    Args:
+        data: 需要擦除的 bytearray（就地修改）
+    """
+    n = len(data)
+    ctypes.memset(ctypes.addressof((ctypes.c_char * n).from_buffer(data)), 0, n)
+
 
 REKEY_NONCE_LENGTH = 16
 PROTOCOL_VERSION = "SIP-1.0"
@@ -308,6 +324,12 @@ class RekeyManager:
         Args:
             new_keys: 新密钥字典
         """
+        # 安全擦除旧密钥（仅对 bytearray 有效，bytes 不可变无法擦除）
+        for key_name in ("encryption_key", "auth_key", "replay_key"):
+            old_val = self.session_state.get(key_name)
+            if old_val and isinstance(old_val, bytearray):
+                _secure_wipe(old_val)
+
         # 更新会话密钥
         self.session_state["encryption_key"] = new_keys["encryption_key"]
         self.session_state["auth_key"] = new_keys["auth_key"]

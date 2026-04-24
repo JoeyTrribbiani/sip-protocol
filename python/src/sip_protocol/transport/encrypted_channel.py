@@ -129,7 +129,7 @@ class EncryptedChannel:
         self._handshake_state: Optional[Dict[str, Any]] = None
 
         # 通道统计
-        self._stats = {
+        self._stats: Dict[str, Any] = {
             "messages_sent": 0,
             "messages_received": 0,
             "bytes_sent": 0,
@@ -459,18 +459,26 @@ class EncryptedChannel:
         if not self._stats["established_at"]:
             return
 
-        # 按消息数量检查
-        if self._send_counter >= self.config.rekey_after_messages:
-            self._initiate_rekey()
+        # 已在rekey中，不重复触发
+        if self.state == ChannelState.REKEYING:
             return
 
+        request = None
+        # 按发送消息数量检查
+        if self._send_counter >= self.config.rekey_after_messages:
+            request = self._initiate_rekey()
+        # 按接收消息数量检查
+        elif self._recv_counter >= self.config.rekey_after_messages:
+            request = self._initiate_rekey()
         # 按时间检查
-        elapsed = time.time() - self._stats["established_at"]
-        if elapsed >= self.config.rekey_after_seconds:
-            self._initiate_rekey()
+        elif time.time() - self._stats["established_at"] >= self.config.rekey_after_seconds:
+            request = self._initiate_rekey()
 
-    def _initiate_rekey(self) -> None:
-        """发起密钥轮换"""
+        if request:
+            self._stats["pending_rekey_request"] = request
+
+    def _initiate_rekey(self) -> Optional[Dict[str, Any]]:
+        """发起密钥轮换，返回rekey请求消息（待发送）"""
         self._set_state(ChannelState.REKEYING)
         assert self._session_keys is not None
         session_state_dict = {
@@ -479,9 +487,69 @@ class EncryptedChannel:
             "replay_key": self._session_keys["replay_key"],
         }
         manager = RekeyManager(session_state_dict, is_initiator=True)
-        manager.create_rekey_request()
-        self._handshake_state = {"rekey_manager": manager}
+        request = manager.create_rekey_request()
+        self._handshake_state = {"rekey_manager": manager, "pending_rekey_request": request}
         self._stats["last_rekey_at"] = time.time()
+        return request
+
+    def get_pending_rekey_request(self) -> Optional[Dict[str, Any]]:
+        """获取待发送的rekey请求消息"""
+        return self._stats.get("pending_rekey_request")
+
+    def process_rekey_response(self, rekey_response: dict) -> None:
+        """处理接收到的rekey响应，完成密钥切换
+
+        Args:
+            rekey_response: rekey响应消息字典
+        """
+        if not self._handshake_state or "rekey_manager" not in self._handshake_state:
+            raise ValueError("没有正在进行的rekey流程")
+
+        manager: RekeyManager = self._handshake_state["rekey_manager"]
+        new_keys = manager.process_rekey_response(rekey_response)
+        manager.apply_new_keys(new_keys)
+
+        # 同步到通道的会话密钥
+        assert self._session_keys is not None
+        self._session_keys["encryption_key"] = manager.session_state["encryption_key"]
+        self._session_keys["auth_key"] = manager.session_state["auth_key"]
+        self._session_keys["replay_key"] = manager.session_state["replay_key"]
+
+        # 清理状态
+        self._handshake_state = None
+        self._stats.pop("pending_rekey_request", None)
+        self._set_state(ChannelState.ESTABLISHED)
+        self._increment_stat("rekey_completed")
+
+    def handle_rekey_request(self, rekey_request: dict) -> Optional[dict]:
+        """处理接收到的rekey请求，生成rekey响应
+
+        Args:
+            rekey_request: rekey请求消息字典
+
+        Returns:
+            rekey响应消息字典（待发送回对方）
+        """
+        assert self._session_keys is not None
+        session_state_dict = {
+            "encryption_key": self._session_keys["encryption_key"],
+            "auth_key": self._session_keys["auth_key"],
+            "replay_key": self._session_keys["replay_key"],
+        }
+        responder = RekeyManager(session_state_dict, is_initiator=False)
+        response = responder.process_rekey_request(rekey_request)
+
+        # 获取并应用新密钥
+        new_keys = responder.temp_new_keys
+        responder.apply_new_keys(new_keys)
+
+        # 同步到通道的会话密钥
+        self._session_keys["encryption_key"] = responder.session_state["encryption_key"]
+        self._session_keys["auth_key"] = responder.session_state["auth_key"]
+        self._session_keys["replay_key"] = responder.session_state["replay_key"]
+
+        self._increment_stat("rekey_completed")
+        return response
 
     # ──────────────── 通道控制 ────────────────
 
