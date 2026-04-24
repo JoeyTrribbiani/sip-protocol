@@ -14,6 +14,7 @@ sip-protocol/
 │       ├── crypto/                # 加密原语层
 │       ├── protocol/              # 协议层
 │       ├── schema/                # 消息结构化层（S1）
+│       ├── discovery/             # 能力发现层（S2 + S4）
 │       ├── file_transfer/         # 文件传输模块（F1）
 │       ├── managers/              # 会话与 nonce 管理
 │       └── transport/             # 传输适配器层
@@ -75,6 +76,15 @@ sip-protocol/
 - **依赖：** 无业务依赖，仅 stdlib
 - **被依赖：** file_transfer/, transport/
 
+### `discovery/` — 能力发现层（S2 + S4）
+| 文件 | 职责 |
+|------|------|
+| `agent_card.py` | AgentCard 自描述卡片、Capabilities（frozen）、Skill、AuthScheme（frozen）、Endpoints（frozen）、AgentRegistration |
+| `registry.py` | AgentRegistry 注册中心（内存+SQLite双写）、AgentFilter 查询过滤、RegistryConfig |
+| `registry_store.py` | RegistryStore SQLite 持久化层（参数化查询、过期/离线查找） |
+- **依赖：** 无业务依赖，仅 stdlib（sqlite3）
+- **被依赖：** 上层应用（Gateway Registry 集成）
+
 ### `file_transfer/` — 文件传输模块（F1）
 | 文件 | 职责 |
 |------|------|
@@ -115,6 +125,7 @@ transport/ ──→ protocol/ ──→ crypto/
     │              └──→ managers/
     │
     └──→ schema/ ←── file_transfer/
+    └──→ discovery/（AgentCard + AgentRegistry）
            │
            └──→ exceptions.py（全局）
 ```

@@ -25,8 +25,8 @@ SIP协议基于 Signal Double Ratchet，使用 XChaCha20-Poly1305 + X25519 + Tri
 │                    协议层（protocol）                        │
 │     握手 │ 消息 │ 群组 │ Rekey │ 分片 │ 恢复 │ 决策        │
 ├──────────────────┬──────────────────────────────────────────┤
-│ 结构化层（schema）│          文件传输层（file_transfer）      │
-│ Envelope │ Message│  Config │ Manifest │ Store │ Manager    │
+│ 结构化层（schema）│    能力发现层（discovery）│ 文件传输（F1）│
+│ Envelope │ Message│  Card │ Registry │  Config │ Store │ Manager │
 │ 8 种 Part       │                                       │
 ├──────────────────┴──────────────────────────────────────────┤
 │                    管理层（managers）                        │
@@ -97,6 +97,33 @@ part = manager.send_file("/path/to/report.pdf")
 manager.receive_file(part, "/output/path/report.pdf")
 ```
 
+### 能力发现（S2 + S4）
+
+```python
+from sip_protocol.discovery import AgentCard, AgentRegistry, Capabilities, Endpoints
+
+# 创建 Agent 自描述卡片
+card = AgentCard(
+    name="search-agent",
+    description="Web search agent",
+    version="1.0.0",
+    url="wss://search.example.com/ws",
+    capabilities=Capabilities(streaming=True),
+    endpoints=Endpoints(primary="wss://search.example.com/ws"),
+)
+
+# 注册到本地注册中心
+registry = AgentRegistry()
+registry.register(card)
+
+# 按技能查询
+from sip_protocol.discovery import AgentFilter
+results = registry.query(AgentFilter(skills=["search"]))
+
+# 心跳续约（TTL 内保持 online）
+registry.heartbeat("search-agent")
+```
+
 ---
 
 ## 模块概览
@@ -107,6 +134,7 @@ manager.receive_file(part, "/output/path/report.pdf")
 | `protocol/` | ✅ 完成 | Triple DH 握手、群组 Double Ratchet + Skip Ratchet、Rekey 闭环、版本协商 |
 | `managers/` | ✅ 完成 | 会话状态、Nonce 防重放、群组成员 |
 | `schema/` | ✅ 完成（S1） | SIPEnvelope + SIPMessage 混合模式、8 种 Part 类型 |
+| `discovery/` | ✅ 完成（S2+S4） | AgentCard 自描述、AgentRegistry 注册中心（内存+SQLite双写） |
 | `file_transfer/` | ✅ 完成（F1） | 分块存储、FileRefPart/FileDataPart 引用策略 |
 | `transport/` | ✅ 完成 | 加密通道、WebSocket/OpenClaw/Hermes/MCP 适配器 |
 | `exceptions.py` | ✅ 完成（P2） | 17 个分层异常 + 错误注册表 |
@@ -119,8 +147,8 @@ manager.receive_file(part, "/output/path/report.pdf")
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 582 passed, 36 skipped |
-| 覆盖率 | 82% |
+| 测试用例 | 630 passed, 36 skipped |
+| 覆盖率 | 83% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |
 | Black | clean |
