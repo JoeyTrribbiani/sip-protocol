@@ -67,9 +67,7 @@ class GroupManager:
         group_base = hkdf(root_key, b"group-base", b"sip-group", 32)
 
         for member in members:
-            chain_key = hkdf(
-                group_base, f"{member}:init".encode(), b"init-chain", CHAIN_KEY_LENGTH
-            )
+            chain_key = hkdf(group_base, f"{member}:init".encode(), b"init-chain", CHAIN_KEY_LENGTH)
 
             chains[member] = {
                 "sending_chain": {"chain_key": chain_key, "message_number": 0},
@@ -586,7 +584,7 @@ class GroupManager:
 
         return json.dumps(message), updated_chain
 
-    def receive_group_message(
+    def receive_group_message(  # pylint: disable=unused-argument
         self, message: str, receiving_chain: dict, sender_id: str
     ) -> tuple[str, dict]:
         """接收群组消息（Double Ratchet + Skip Ratchet）
@@ -596,7 +594,7 @@ class GroupManager:
         Args:
             message: 群组消息（JSON字符串）
             receiving_chain: 接收链状态
-            sender_id: 发送者ID
+            sender_id: 发送者ID（保留用于未来签名验证扩展）
 
         Returns:
             Tuple[str, dict]: (明文消息, 更新后的接收链状态)

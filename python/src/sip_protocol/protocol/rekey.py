@@ -3,6 +3,7 @@ Rekey密钥轮换模块
 实现密钥轮换流程（前向保密）
 """
 
+import ctypes
 import os
 import time
 import hmac
@@ -23,7 +24,6 @@ def _secure_wipe(data: bytearray) -> None:
     Args:
         data: 需要擦除的 bytearray（就地修改）
     """
-    import ctypes
     n = len(data)
     ctypes.memset(ctypes.addressof((ctypes.c_char * n).from_buffer(data)), 0, n)
 

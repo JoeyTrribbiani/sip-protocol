@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+#### 协议修复（P3）
+- **Handshake** — 删除 `complete_handshake` 中重复的三重 DH 计算（G9）
+- **Resume** — 修复 `verify_session_resume` 签名验证字段 `session_id` → `sender_id`（G8）
+- **Nonce** — `set` 改为 `OrderedDict`，保证 FIFO 淘汰顺序（G10）
+- **Rekey** — 旧密钥安全擦除（`ctypes.memset`）+ 接收端计数器触发检查（G5/G6）
+- **Rekey 闭环** — `process_rekey_response`/`handle_rekey_request` 方法补全，支持完整的 request→response→apply 流程（G4）
+- **群组 Double Ratchet** — `chain_key` 推进（`HKDF` message-key → chain-key）+ Skip Ratchet 乱序处理（G1/G2/G3）
+- **版本协商** — 添加 4 步协商协议（`version_offer` → `version_response` → 解析）（G7）
+
 ### 新增
 
 #### SIP 混合 Schema（S1）

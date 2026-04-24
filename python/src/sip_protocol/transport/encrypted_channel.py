@@ -129,7 +129,7 @@ class EncryptedChannel:
         self._handshake_state: Optional[Dict[str, Any]] = None
 
         # 通道统计
-        self._stats = {
+        self._stats: Dict[str, Any] = {
             "messages_sent": 0,
             "messages_received": 0,
             "bytes_sent": 0,

@@ -112,7 +112,9 @@ class TestSkipRatchet:
         recv_chain = {"chain_key": b"init" * 8, "message_number": 0, "skip_keys": {}}
         _, recv_chain = mgr.receive_group_message(msg0, recv_chain, "alice")
         _, recv_chain = mgr.receive_group_message(msg2, recv_chain, "alice")  # skip msg1
-        pt3, recv_chain = mgr.receive_group_message(msg3, recv_chain, "alice")  # in-order after skip
+        pt3, recv_chain = mgr.receive_group_message(
+            msg3, recv_chain, "alice"
+        )  # in-order after skip
         assert pt3 == "m3"
 
 
@@ -133,7 +135,10 @@ class TestAddMemberChainKeys:
         mgr.add_member("alice")
         mgr.add_member("bob")
 
-        assert mgr.members["alice"]["sending_chain"]["chain_key"] != mgr.members["bob"]["sending_chain"]["chain_key"]
+        assert (
+            mgr.members["alice"]["sending_chain"]["chain_key"]
+            != mgr.members["bob"]["sending_chain"]["chain_key"]
+        )
 
 
 class TestInitializeGroupChains:
