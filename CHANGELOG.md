@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+- **v2.0 瘦身残留清理**：`discovery/`、`file_transfer/`、`schema/` 三个目录在源码树
+  中仅剩 `__pycache__` 缓存壳（源文件已在 2.0.0 删除，但编译缓存未清且被 gitignore，
+  导致 `ls` 验收时误判"模块仍在"）。清理后源码树与 README/AGENTS.md/docs 模块清单
+  逐条一致——审计确认无需补写模块文档：残留目录本就无代码，`managers/`/`transport/`
+  均为保留核心且已有文档
+- **README 徽标补齐**：徽章 3 → 8 枚，对照 harness `python-ci-standard.md` 规范与
+  `.github/workflows/ci.yml` 实跑项（Black/Pylint/MyPy/pytest+codecov/pip-audit）
+  不虚挂：新增 CI 状态、codecov、cryptography、pytest、code style black；
+  lint 工具实为 Black（非 ruff），按规范挂 black 官方徽章
+- **README API 参考节补分层依赖一行**：transport → protocol → crypto，managers
+  被 protocol/transport 复用——README 单独可读，不必跳转 architecture.md
+
 ## [2.0.0] - 2026-09-11
 
 定位重构：从多 Agent 协同协议瘦身为**纯加密库**（encryption-only）。

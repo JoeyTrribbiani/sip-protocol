@@ -3,8 +3,13 @@
 > Secure Intelligence Protocol — Agent 间端到端加密通道（TLS for Agent Communication）
 > 纯加密层：不解析、不关心业务消息内容，业务层零侵入
 
+[![CI](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/JoeyTrribbiani/sip-protocol/badge.svg)](https://codecov.io/gh/JoeyTrribbiani/sip-protocol)
 [![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![algorithm](https://img.shields.io/badge/AEAD-XChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/)
+[![cryptography](https://img.shields.io/badge/cryptography-41%2B-blue.svg)](https://github.com/pyca/cryptography)
+[![AEAD](https://img.shields.io/badge/AEAD-XChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/)
+[![pytest](https://img.shields.io/badge/pytest-7.4%2B-brightgreen.svg)](https://docs.pytest.org/)
+[![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
 ---
@@ -91,6 +96,10 @@ assert decrypt_message(keys_b["encryption_key"], enc) == "hello"
 ```
 
 ## API 参考
+
+> 分层依赖（自上而下单向）：`transport/` → `protocol/` → `crypto/`；`managers/` 提供
+> 会话状态与防重放，被 `protocol/` 与 `transport/` 复用；`exceptions.py` 为全局异常体系。
+> 完整架构图见 [docs/architecture.md](./docs/architecture.md)。
 
 | 模块 | 主要入口 | 说明 |
 |------|---------|------|
