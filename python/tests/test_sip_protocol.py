@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from sip_protocol.crypto.dh import generate_keypair, dh_exchange
 from sip_protocol.crypto.argon2 import hash_psk
 from sip_protocol.protocol.message import encrypt_message, decrypt_message, generate_replay_tag
-from sip_protocol.protocol.group import GroupManager
 from sip_protocol.managers.nonce import NonceManager
 from sip_protocol.crypto.xchacha20_poly1305 import generate_nonce
 from sip_protocol.protocol.handshake import HANDSHAKE_NONCE_LENGTH
@@ -156,56 +155,6 @@ def test_replay_tag():
     print("✅ 测试5通过！\n")
 
 
-def test_group_encryption():
-    """测试群组加密"""
-    print("=== 测试6：群组加密 ===")
-
-    # 创建群组状态
-    group_state = {
-        "group_id": "group:test-123",
-        "root_key": bytes.fromhex("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"),
-        "members": {
-            "agent-a": {
-                "sending_chain": {
-                    "chain_key": bytes.fromhex(
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                    ),
-                    "message_number": 0,
-                },
-                "receiving_chains": {},
-            },
-            "agent-b": {
-                "sending_chain": {
-                    "chain_key": bytes.fromhex(
-                        "222222222222222222222222222222222222222222222222222222222222222222"
-                    ),
-                    "message_number": 0,
-                },
-                "receiving_chains": {},
-            },
-            "agent-c": {
-                "sending_chain": {
-                    "chain_key": bytes.fromhex(
-                        "333333333333333333333333333333333333333333333333333333333333333333"
-                    ),
-                    "message_number": 0,
-                },
-                "receiving_chains": {},
-            },
-        },
-    }
-
-    # 发送群组消息
-    plaintext = "Hello, Group SIP!"
-    group_manager = GroupManager(group_state["group_id"], group_state["root_key"])
-    message, updated_state = group_manager.send_group_message(
-        plaintext, group_state["members"]["agent-a"]["sending_chain"], "agent-a"
-    )
-
-    print(f"✅ 群组消息已发送：{message[:50]}...")
-    print("✅ 测试6通过！\n")
-
-
 def main():
     """运行所有测试"""
     print("\n" + "=" * 50)
@@ -218,7 +167,6 @@ def main():
         test_nonce_management()
         test_timestamp_validation()
         test_replay_tag()
-        test_group_encryption()
 
         print("\n" + "=" * 50)
         print("✅ 所有测试通过！")

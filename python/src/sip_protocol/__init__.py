@@ -1,6 +1,6 @@
 """
 SIP Protocol Library
-Swarm Intelligence Protocol - 基于Signal Double Ratchet的多Agent端到端加密通信协议
+Secure Intelligence Protocol - Agent间端到端加密通道库（纯加密层）
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

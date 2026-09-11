@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sip-protocol"
-version = "1.4.0"
-description = "Swarm Intelligence Protocol (SIP) - 基于Signal Double Ratchet的多Agent端到端加密通信协议"
+version = "2.0.0"
+description = "SIP (Secure Intelligence Protocol) - Agent间端到端加密通道库：三重DH握手/XChaCha20-Poly1305/Rekey前向保密/防重放"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
@@ -41,7 +41,6 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
     "pylint>=3.0.0",
     "mypy>=1.5.0",

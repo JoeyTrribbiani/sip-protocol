@@ -1,9 +1,8 @@
-# SIP协议Python实现开发依赖
+# SIP加密库开发依赖
 
 # 测试
 pytest>=7.4.0
 pytest-cov>=4.1.0
-pytest-asyncio>=0.21.0
 
 # 代码格式化
 black>=23.0.0

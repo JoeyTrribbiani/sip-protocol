@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -13,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+lib/*
+!lib/index.mjs
 lib64/
 parts/
 sdist/
@@ -22,6 +24,19 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Test / coverage artifacts
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Tool plugin markers
+.v2c/
+.video_agent/
 
 # Node.js
 node_modules/

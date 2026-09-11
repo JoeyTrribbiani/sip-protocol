@@ -1,4 +1,7 @@
-name: CI/CD
+name: CI
+
+# python-ci-standard 档位 A（分发库）: L1 依赖安装 / L2 静态检查 / L3 类型检查
+# L4 测试+覆盖率 / L5 安全审计；L6 性能为可选未启用（纯加密核心以 pytest 覆盖）
 
 on:
   push:
@@ -7,39 +10,8 @@ on:
     branches: [ main ]
 
 jobs:
-  javascript-test:
-    name: JavaScript Tests
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./javascript
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run lint
-      run: npm run lint
-
-    - name: Run tests
-      run: npm test
-
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-      with:
-        files: ./javascript/coverage/lcov.info
-
   python-test:
-    name: Python Tests
+    name: Python Lint + Type + Test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,14 +19,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
 
+    # L1 依赖安装
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -64,20 +37,23 @@ jobs:
     - name: Install project
       run: pip install -e .
 
+    # L2 静态检查
     - name: Run Black
       run: black src/sip_protocol/ --check
 
     - name: Run Pylint
       run: pylint src/sip_protocol/
 
+    # L3 类型检查
     - name: Run MyPy
       run: mypy src/sip_protocol/
 
+    # L4 测试 + 覆盖率
     - name: Run tests
       run: pytest tests/ --cov=src/sip_protocol --cov-report=xml --cov-report=term
 
     - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         files: ./python/coverage.xml
 
@@ -87,18 +63,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: JavaScript audit
-      working-directory: ./javascript
-      run: npm audit
+      uses: actions/checkout@v4
 
     - name: Setup Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
 
+    # L5 安全审计（pip 由 runner 管理，CVE-2026-3219 为 pip 自身误报）
     - name: Install Python dependencies
       working-directory: ./python
       run: |
@@ -109,48 +82,3 @@ jobs:
     - name: Python audit
       working-directory: ./python
       run: pip-audit --ignore-vuln CVE-2026-3219
-
-  performance-test:
-    name: Performance Tests
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./javascript
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run performance tests
-      run: node benchmarks/performance.js
-
-    - name: Comment PR with performance results
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          const results = JSON.parse(fs.readFileSync('benchmarks/results.json', 'utf8'));
-          const comment = `## Performance Results
-          | Metric | Actual | Requirement | Status |
-          |--------|--------|-------------|--------|
-          | DH Exchange | ${results.dh}ms | < 10ms | ✅ |
-          | HKDF | ${results.hkdf}ms | < 5ms | ✅ |
-          | AES-GCM | ${results.aes}ms | < 1ms | ✅ |
-          | Group Encrypt (in-order) | ${results.group_in_order}ms | < 0.5ms | ✅ |
-          | Group Encrypt (out-of-order) | ${results.group_out_of_order}ms | < 2ms | ✅ |`;
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
