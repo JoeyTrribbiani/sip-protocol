@@ -1,6 +1,6 @@
 """
 SIP传输层测试
-测试加密消息通道、消息格式和OpenClaw适配器
+测试加密消息通道和消息格式
 
 运行方式:
     cd python
@@ -9,9 +9,8 @@ SIP传输层测试
 测试覆盖:
     1. AgentMessage 消息格式
     2. EncryptedChannel 加密通道
-    3. OpenClawAdapter 适配器
-    4. 三方通信场景
-    5. 边界条件和错误处理
+    3. 三方通信场景
+    4. 边界条件和错误处理
 """
 
 import sys
@@ -39,11 +38,6 @@ from sip_protocol.transport.encrypted_channel import (
     EncryptedChannel,
     ChannelState,
     ChannelConfig,
-)
-from sip_protocol.transport.openclaw_adapter import (
-    OpenClawAdapter,
-    AgentConfig,
-    SpawnResult,
 )
 
 # ──────────────── 测试常量 ────────────────
@@ -584,209 +578,7 @@ class TestEncryptedChannel:
 
 
 # ═══════════════════════════════════════════════════════════════
-# Part 3: OpenClawAdapter 适配器测试
-# ═══════════════════════════════════════════════════════════════
-
-
-class TestOpenClawAdapter:
-    """OpenClawAdapter 适配器测试"""
-
-    def _create_paired_adapters(self):
-        """创建一对已连接的适配器"""
-        adapter_a = OpenClawAdapter(
-            config=AgentConfig(
-                agent_id=AGENT_A_ID,
-                agent_type="decision",
-                psk=TEST_PSK,
-            )
-        )
-        adapter_b = OpenClawAdapter(
-            config=AgentConfig(
-                agent_id=AGENT_B_ID,
-                agent_type="orchestrator",
-                psk=TEST_PSK,
-            )
-        )
-
-        adapter_a.start()
-        adapter_b.start()
-
-        # 握手
-        hello = adapter_a.initiate_handshake()
-        auth = adapter_b.respond_to_handshake(hello)
-        adapter_a.complete_handshake(auth)
-
-        return adapter_a, adapter_b
-
-    def test_adapter_creation(self):
-        """测试适配器创建"""
-        adapter = OpenClawAdapter(
-            config=AgentConfig(
-                agent_id=AGENT_A_ID,
-                agent_type="decision",
-                psk=TEST_PSK,
-            )
-        )
-        assert adapter.agent_id == AGENT_A_ID
-        assert adapter.agent_type == "decision"
-        assert not adapter.is_connected
-
-    def test_adapter_start_stop(self):
-        """测试适配器启动和停止"""
-        adapter = OpenClawAdapter(
-            config=AgentConfig(
-                agent_id=AGENT_A_ID,
-                agent_type="decision",
-                psk=TEST_PSK,
-            )
-        )
-        adapter.start()
-        assert adapter._stats["started_at"] is not None
-
-        adapter.stop()
-        assert adapter.channel.state == ChannelState.IDLE
-
-    def test_adapter_handshake(self):
-        """测试适配器握手"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-        assert adapter_a.is_connected
-        assert adapter_b.is_connected
-
-    def test_adapter_send_encrypted(self):
-        """测试适配器发送加密消息"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        text = "Encrypted message via adapter"
-        encrypted = adapter_a.send_encrypted(text, AGENT_B_ID)
-        assert encrypted.type == MessageType.ENCRYPTED
-
-        decrypted = adapter_b.receive_encrypted(encrypted)
-        assert decrypted == text
-
-    def test_adapter_bidirectional(self):
-        """测试适配器双向通信"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        # A → B
-        enc_a = adapter_a.send_encrypted("A to B", AGENT_B_ID)
-        dec_a = adapter_b.receive_encrypted(enc_a)
-        assert dec_a == "A to B"
-
-        # B → A
-        enc_b = adapter_b.send_encrypted("B to A", AGENT_A_ID)
-        dec_b = adapter_a.receive_encrypted(enc_b)
-        assert dec_b == "B to A"
-
-    def test_adapter_stats(self):
-        """测试适配器统计"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        adapter_a.send_encrypted("test", AGENT_B_ID)
-        adapter_b.receive_encrypted(adapter_a.get_outbound_messages()[0])
-
-        stats = adapter_a.stats
-        assert stats["messages_sent"] >= 1
-        assert "channel" in stats
-
-    def test_adapter_known_agents(self):
-        """测试Agent注册"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        agents = adapter_b.get_known_agents()
-        assert AGENT_A_ID in agents
-
-    def test_adapter_message_callback(self):
-        """测试消息回调"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        received = []
-        adapter_b.on_message(lambda text, msg: received.append(text))
-
-        encrypted = adapter_a.send_encrypted("Callback test", AGENT_B_ID)
-        adapter_b.receive_encrypted(encrypted)
-
-        assert len(received) == 1
-        assert received[0] == "Callback test"
-
-    def test_adapter_outbound_queue(self):
-        """测试出站消息队列"""
-        adapter_a, adapter_b = self._create_paired_adapters()
-
-        adapter_a.send_encrypted("msg1", AGENT_B_ID)
-        adapter_a.send_encrypted("msg2", AGENT_B_ID)
-
-        outbound = adapter_a.get_outbound_messages()
-        assert len(outbound) == 2
-
-        # 清空后应为空
-        outbound = adapter_a.get_outbound_messages()
-        assert len(outbound) == 0
-
-    def test_spawn_result_dataclass(self):
-        """测试SpawnResult数据类"""
-        result = SpawnResult(
-            session_id="session-123",
-            label="test-session",
-            success=True,
-        )
-        assert result.session_id == "session-123"
-        assert result.success
-
-        failed = SpawnResult(
-            session_id="",
-            label="failed-session",
-            success=False,
-            error="CLI not found",
-        )
-        assert not failed.success
-        assert failed.error == "CLI not found"
-
-    def test_forward_message(self):
-        """测试消息转发"""
-        # 创建三个适配器: A ↔ B ↔ C
-        adapter_a = OpenClawAdapter(
-            config=AgentConfig(agent_id=AGENT_A_ID, agent_type="decision", psk=TEST_PSK)
-        )
-        adapter_b = OpenClawAdapter(
-            config=AgentConfig(agent_id=AGENT_B_ID, agent_type="orchestrator", psk=TEST_PSK)
-        )
-        adapter_c = OpenClawAdapter(
-            config=AgentConfig(agent_id=AGENT_C_ID, agent_type="executor", psk=TEST_PSK)
-        )
-
-        adapter_a.start()
-        adapter_b.start()
-        adapter_c.start()
-
-        # A ↔ B 握手
-        hello_ab = adapter_a.initiate_handshake()
-        auth_ab = adapter_b.respond_to_handshake(hello_ab)
-        adapter_a.complete_handshake(auth_ab)
-
-        # B ↔ C 握手（使用B的另一个通道实例，实际需要独立通道）
-        # 在这个简化测试中，我们通过B的通道转发
-        # 注意：实际三方通信需要B维护两个独立的加密通道
-
-        # 简化测试：A加密发送给B，B解密后转发给C
-        # 在这个测试中我们只验证转发逻辑的存在
-        assert adapter_a.is_connected
-        assert adapter_b.is_connected
-
-    def test_agent_config_dataclass(self):
-        """测试AgentConfig数据类"""
-        config = AgentConfig(
-            agent_id="test-agent",
-            agent_type="executor",
-            psk=b"test-psk",
-        )
-        assert config.agent_id == "test-agent"
-        assert config.agent_type == "executor"
-        assert config.psk == b"test-psk"
-        assert config.openclaw_path == "openclaw"  # default
-
-
-# ═══════════════════════════════════════════════════════════════
-# Part 4: 三方通信场景测试
+# Part 3: 三方通信场景测试
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -1053,14 +845,6 @@ class TestEdgeCases:
         assert restored.payload == original.payload
         assert restored.metadata == original.metadata
         assert restored.timestamp == original.timestamp
-
-    def test_adapter_not_connected_send(self):
-        """测试未连接时发送"""
-        adapter = OpenClawAdapter(
-            config=AgentConfig(agent_id=AGENT_A_ID, agent_type="decision", psk=TEST_PSK)
-        )
-        with pytest.raises(RuntimeError):
-            adapter.send_encrypted("test")
 
     def test_channel_error_callback(self):
         """测试错误回调"""

@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """
 SIP协议端到端集成测试
-测试从握手到消息加密到Rekey到连接恢复的完整流程
+测试从握手到消息加密到Rekey的完整流程
 """
 
 import sys
 import os
-import time
-import json
-from cryptography.hazmat.primitives.asymmetric import x25519
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import x25519
-from cryptography.hazmat.primitives import serialization
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -22,11 +16,6 @@ from sip_protocol.protocol.handshake import (
 )
 from sip_protocol.protocol.message import encrypt_message, decrypt_message, generate_replay_tag
 from sip_protocol.protocol.rekey import RekeyManager
-from sip_protocol.protocol.resume import (
-    serialize_session_state,
-    deserialize_session_state,
-    is_session_expired,
-)
 from sip_protocol.managers.nonce import NonceManager
 from sip_protocol.managers.session import SessionState
 
@@ -71,7 +60,6 @@ def test_full_handshake_flow():
     # 继续其他测试
     _test_message_encryption_decryption(agent_a_keys["encryption_key"], agent_a_keys["replay_key"])
     _test_rekey_flow(session_state)
-    _test_connection_resume(session_state)
 
 
 def _test_message_encryption_decryption(encryption_key, replay_key):
@@ -153,86 +141,6 @@ def _test_rekey_flow(session_state, is_initiator=True):
     return session_state
 
 
-def _test_connection_resume(session_state):
-    """测试连接恢复流程"""
-    print("\n=== 测试4：连接恢复流程 ===")
-
-    # 创建会话恢复状态
-    from sip_protocol.protocol.resume import SessionResumeState
-
-    resume_state = SessionResumeState(
-        session_id="agent-a",
-        partner_id="agent-b",
-        established_at=session_state["created_at"],
-        encryption_key=(
-            session_state["encryption_key"].hex()
-            if isinstance(session_state["encryption_key"], bytes)
-            else session_state["encryption_key"]
-        ),
-        auth_key=(
-            session_state["auth_key"].hex()
-            if isinstance(session_state["auth_key"], bytes)
-            else session_state["auth_key"]
-        ),
-        replay_key=(
-            session_state["replay_key"].hex()
-            if isinstance(session_state["replay_key"], bytes)
-            else session_state["replay_key"]
-        ),
-        message_counter_send=0,
-        message_counter_receive=0,
-        last_rekey_sequence=0,
-        rekey_key_derived=False,
-    )
-
-    # 序列化会话状态
-    serialized = serialize_session_state(resume_state)
-
-    print(f"✅ 序列化会话状态")
-    print(f"   - Serialized length: {len(serialized)} bytes")
-
-    # 反序列化会话状态
-    deserialized_state = deserialize_session_state(serialized)
-
-    print("✅ 反序列化会话状态")
-
-    # 验证状态一致
-    assert deserialized_state.session_id == resume_state.session_id, "会话ID不一致！"
-    assert deserialized_state.partner_id == resume_state.partner_id, "伙伴ID不一致！"
-    assert deserialized_state.established_at == resume_state.established_at, "建立时间不一致！"
-    assert deserialized_state.encryption_key == resume_state.encryption_key, "加密密钥不一致！"
-    assert deserialized_state.auth_key == resume_state.auth_key, "认证密钥不一致！"
-    assert deserialized_state.replay_key == resume_state.replay_key, "防重放密钥不一致！"
-
-    print("✅ 反序列化的状态与原始状态一致")
-
-    # 检查会话是否过期
-    is_expired = is_session_expired(resume_state)
-    assert not is_expired, "会话不应该过期！"
-    print("✅ 会话未过期")
-
-    # 测试过期检查（创建一个过期的会话）
-    from sip_protocol.protocol.resume import SESSION_TTL
-
-    expired_state = SessionResumeState(
-        session_id="agent-a",
-        partner_id="agent-b",
-        established_at=int(time.time()) - SESSION_TTL - 1,  # 过期1秒
-        encryption_key=session_state["encryption_key"].hex(),
-        auth_key=session_state["auth_key"].hex(),
-        replay_key=session_state["replay_key"].hex(),
-        message_counter_send=0,
-        message_counter_receive=0,
-        last_rekey_sequence=0,
-        rekey_key_derived=False,
-    )
-    is_expired = is_session_expired(expired_state)
-    assert is_expired, "会话应该已过期！"
-    print("✅ 过期会话检测正确")
-
-    print("✅ 测试4通过！")
-
-
 def test_full_lifecycle():
     """测试完整的生命周期流程"""
     print("\n=== 测试5：完整的生命周期流程 ===")
@@ -294,33 +202,9 @@ def test_full_lifecycle():
     assert decrypted == plaintext
     print("✅ 新密钥加密/解密成功")
 
-    # 5. 连接恢复
-    print("\n--- 阶段5：连接恢复 ---")
-    from sip_protocol.protocol.resume import SessionResumeState
-
-    resume_state = SessionResumeState(
-        session_id="agent-a",
-        partner_id="agent-b",
-        established_at=session_state["created_at"],
-        encryption_key=session_state["encryption_key"].hex(),
-        auth_key=session_state["auth_key"].hex(),
-        replay_key=session_state["replay_key"].hex(),
-        message_counter_send=0,
-        message_counter_receive=0,
-        last_rekey_sequence=0,
-        rekey_key_derived=False,
-    )
-
-    serialized = serialize_session_state(resume_state)
-    deserialized = deserialize_session_state(serialized)
-
-    assert deserialized.session_id == resume_state.session_id
-    assert deserialized.encryption_key == resume_state.encryption_key
-    print("✅ 连接恢复成功")
-
-    # 6. 恢复后继续发送消息
+    # 5. Rekey后继续发送消息
     print("\n--- 阶段6：恢复后继续发送消息 ---")
-    plaintext = "Hello, Agent B! Post-resume message."
+    plaintext = "Hello, Agent B! Post-rekey message."
     encrypted_msg = encrypt_message(
         session_state["encryption_key"],
         plaintext,

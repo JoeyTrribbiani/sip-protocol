@@ -5,7 +5,7 @@ SIP传输层模块
 包含：
 - AgentMessage: Agent间通信的消息格式
 - EncryptedChannel: 基于SIP加密库的安全通道
-- OpenClawAdapter: OpenClaw平台集成适配器
+- SipMcpServer: MCP Server（stdio JSON-RPC，OpenClaw 在用）
 """
 
 from .message import (
@@ -18,9 +18,7 @@ from .message import (
     parse_raw_message,
 )
 from .encrypted_channel import EncryptedChannel, ChannelState
-from .openclaw_adapter import OpenClawAdapter
 from .sip_mcp_server import SipMcpServer
-from .hermes_claude_adapter import HermesClaudeAdapter
 
 __all__ = [
     # 消息
@@ -34,9 +32,6 @@ __all__ = [
     # 通道
     "EncryptedChannel",
     "ChannelState",
-    # 适配器
-    "OpenClawAdapter",
-    "HermesClaudeAdapter",
     # MCP Server
     "SipMcpServer",
 ]
