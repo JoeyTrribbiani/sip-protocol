@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+- **CI Security Audit（uv sync --frozen 首跑）** — 切冻结安装后暴露 uv.lock
+  锁定的 cryptography 46.0.7 含 PYSEC-2026-3552/3553/3554 + GHSA-537c-gmf6-5ccf
+  （修复版 48.0.1~50.0.0；原 requirements 安装每次拉最新版故从未撞上）；
+  `uv lock --upgrade-package cryptography` → 50.0.1，跨大版本兼容性经
+  239 测试 + pylint 10.00 + mypy + wheel 核验全绿验收
+
 ### 变更（封装标准化，零功能改动）
 
 - **布局扁平化（ed1dcac）** — `python/` 嵌套子项目上提根级单包
