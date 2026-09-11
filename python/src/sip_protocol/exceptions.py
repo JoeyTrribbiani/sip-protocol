@@ -377,6 +377,8 @@ class ChunkIntegrityError(FileTransferError):
         kwargs.setdefault("code", "SIP-FILE-001")
         kwargs.setdefault("recoverable", False)
         kwargs.setdefault("message", msg)
+        kwargs.setdefault("details", {})
+        kwargs["details"].setdefault("chunk_index", chunk_index)
         super().__init__(**kwargs)
 
 
@@ -389,4 +391,16 @@ class FileTooLargeError(FileTransferError):
         msg = f"文件过大: {file_size} > {max_size}"
         kwargs.setdefault("code", "SIP-FILE-002")
         kwargs.setdefault("message", msg)
+        super().__init__(**kwargs)
+
+
+@_register_error
+@dataclass
+class ArtifactCorruptedError(FileTransferError):
+    """加密文件工件损坏（魔数/头部/截断/格式非法）"""
+
+    def __init__(self, message: str = "加密文件工件损坏", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-FILE-003")
+        kwargs.setdefault("recoverable", False)
+        kwargs.setdefault("message", message)
         super().__init__(**kwargs)
