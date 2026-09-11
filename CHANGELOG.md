@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-11
+
+定位重构：从多 Agent 协同协议瘦身为**纯加密库**（encryption-only）。
+只保留握手/加解密/Rekey/防重放核心，应用层职责全部移除（git 历史 ≤ v1.4.0 可回溯）。
+
+### 移除（Breaking）
+
+- **非加密模块**: `discovery/`（AgentCard/AgentRegistry）、`file_transfer/`（F1）、
+  `schema/`（S1 结构化消息）
+- **protocol/ 应用层**: group、group_simple（群组 Double Ratchet）、decision（集体决策）、
+  fragment（分片）、offline_queue、persistence（SQLite）、resume（连接恢复）、version（版本协商）
+- **transport/ 适配器**: base、openclaw_adapter、hermes_claude_adapter、websocket_adapter
+- **javascript/ 早期实现**与根 JS 工具链（package.json/.husky）
+- 对应测试 22 个删除，4 个混合测试裁剪；docs 21 个失效文档清洗（保留 5 个对齐新定位）
+
+### 变更
+
+- `transport/__init__.py` 收敛导出（EncryptedChannel/AgentMessage/SipMcpServer）
+- `tests/test_e2e_three_party.py` 改写为 MCP 长驻进程模式（修复跨进程 complete 必败的既有损坏），
+  硬编码生产 PSK 替换为独立测试 PSK
+- 版本号统一至 2.0.0（原 pyproject 1.4.0 与 `__init__` 1.0.0 不一致）
+- README 重写为纯加密库定位（算法清单/快速上手/API 参考/安全注意事项 + 徽章三件）
+- CI 收敛为 python-ci-standard 档位 A（L1-L5），移除 JS 测试与 JS 性能流水线
+
+### 保障
+
+- MCP 四工具行为不变：黄金基线 diff 逐字节一致（initialize/tools_list schema/全流程/错误码）
+- 核心层测试 207 passed 全绿；覆盖率 88%；Pylint 10.00/10；MyPy 零问题；Black clean
+
 ## [1.4.0] - 2026-04-25
 
 ### 修复

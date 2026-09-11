@@ -1,10 +1,10 @@
-# SIP 协议架构设计
+# SIP 加密库架构设计
 
-> Swarm Intelligence Protocol — 端到端加密的多 Agent 通信协议（TLS for Agent Communication）
+> Secure Intelligence Protocol — Agent 间端到端加密通道（TLS for Agent Communication）
 
 ## 概述
 
-SIP 采用分层架构：从底层加密原语到高层消息结构，每一层职责明确。基于 Signal Double Ratchet，使用 XChaCha20-Poly1305 + X25519 + Triple DH。
+SIP 自 v2.0 起专注加密层：为任意两个 Agent 提供端到端加密通道，不解析、不关心业务消息内容。基于 Triple DH 握手 + XChaCha20-Poly1305 消息加密 + Rekey 前向保密 + Nonce 防重放。
 
 **技术栈：** Python 3.11+, stdlib dataclasses + enum, cryptography, argon2-cffi
 
@@ -12,7 +12,7 @@ SIP 采用分层架构：从底层加密原语到高层消息结构，每一层�
 - 单一职责 — 每个模块/文件只负责一个功能
 - 高内聚低耦合 — 模块内部紧密，模块之间松散
 - 纯同步 API — 无 async/await，简化调用方
-- 接口稳定 — Protocol 定义抽象，实现可替换
+- 纯 stdlib 数据结构 — dataclasses + enum，无 pydantic 依赖
 
 ---
 
@@ -20,297 +20,106 @@ SIP 采用分层架构：从底层加密原语到高层消息结构，每一层�
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    传输适配器层（transport）                  │
-│     WebSocket │ OpenClaw │ Hermes │ MCP Server              │
+│                    传输层（transport）                        │
+│     EncryptedChannel 加密通道 │ AgentMessage │ MCP Server   │
 ├─────────────────────────────────────────────────────────────┤
 │                    协议层（protocol）                        │
-│     握手 │ 消息 │ 群组 │ Rekey │ 分片 │ 恢复 │ 决策        │
-├──────────────────┬──────────────┬──────────────────────────────┤
-│ 结构化层（schema）│ 能力发现(discovery)│    文件传输层(file_transfer) │
-│ Envelope │ Message│Card Registry│Config │ Manifest │Store │Manager │
-│ 8 种 Part       │                                       │
-├──────────────────┴──────────────────────────────────────────┤
+│     三重DH握手 │ 加密消息构建 │ Rekey 密钥轮换              │
+├─────────────────────────────────────────────────────────────┤
 │                    管理层（managers）                        │
-│     会话状态 │ Nonce 防重放 │ 群组成员                       │
+│     会话状态（SessionState） │ Nonce 防重放                 │
 ├─────────────────────────────────────────────────────────────┤
 │                    加密原语层（crypto）                      │
-│  XChaCha20 │ AES-GCM │ X25519 │ HKDF │ Argon2             │
+│  XChaCha20-Poly1305 │ AES-GCM │ X25519 │ HKDF │ Argon2id   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 混合消息模式（S1）
-
-SIP 采用「信封 + 消息」双层结构：
-
-### SIPEnvelope — 加密载体
-```python
-@dataclass
-class SIPEnvelope:
-    version: str          # 协议版本
-    payload: bytes        # 加密后的密文（bytes，不解析内容）
-    content_type: str     # 顶层字段：payload 的 MIME 类型
-    content_encoding: str # 顶层字段：编码方式（如 "aes256-gcm"）
-    sender: str           # 发送者标识
-    recipient: str        # 接收者标识
-    timestamp: str        # ISO 8601 UTC
-    nonce: str            # 加密 nonce
-    session_id: str       # 会话 ID
-```
-
-### SIPMessage — 结构化语义
-```python
-@dataclass
-class SIPMessage:
-    message_id: str       # UUID7
-    sender: str
-    recipient: str
-    content_type: str
-    parts: list[Part]     # 8 种 Part 类型
-    parent_id: str        # 父消息 ID（不在信封层）
-    created_at: str
-    expires_at: str
-```
-
-### 8 种 Part 类型
-
-| Part | 用途 | 语义 |
-|------|------|------|
-| TextPart | 文本消息 | 轻量，直接内联 |
-| BinaryPart | 二进制数据 | base64 内联 |
-| FileRefPart | 文件引用 | 轻量引用，指向 manifest |
-| FileDataPart | 文件内联 | 小文件 base64 内联 |
-| AgentRefPart | Agent 引用 | 引用其他 Agent |
-| TaskPart | 任务描述 | 结构化任务信息 |
-| ControlPart | 控制指令 | 协议级控制消息 |
-| ErrorPart | 错误信息 | 结构化错误报告 |
+依赖方向自上而下单向流动，`exceptions.py` 作为全局异常体系被所有层引用。
 
 ---
 
-## 文件传输（F1）
+## 加密原语层（crypto/）
 
-### 设计策略
-- **小文件**（≤ inline_threshold，默认 4KB）→ FileDataPart（base64 内联到消息中）
-- **大文件**（> inline_threshold）→ FileRefPart（引用）+ LocalFileStore（本地存储块）
-
-### 分块流程
-
-```
-发送方:
-  文件 → 分块（chunk_size=1MB）→ 计算 hash → 存入 LocalFileStore → 返回 FileRefPart
-
-接收方:
-  FileRefPart → 读取 manifest → 逐块读取并校验 hash → 重组 → 写入输出路径
-```
-
-### 关键组件
-
-| 组件 | 职责 |
+| 文件 | 职责 |
 |------|------|
-| FileTransferConfig | 阈值配置（inline_threshold, chunk_size, max_file_size） |
-| FileChunk + FileManifest | 块元数据 + 文件清单（序列化支持） |
-| FileStore (Protocol) | 存储接口定义 |
-| LocalFileStore | 本地文件系统实现（目录结构化、过期清理） |
-| FileTransferManager | 核心协调器（send_file, receive_file, get_progress） |
-| TransferStatus | 状态机（PENDING → SENDING → COMPLETED/FAILED/CANCELED） |
-| TransferProgress | 归一化进度追踪（0..1） |
+| `xchacha20_poly1305.py` | XChaCha20-Poly1305 AEAD 加密/解密（主算法） |
+| `aes_gcm.py` | AES-256-GCM 加密/解密（备选算法） |
+| `dh.py` | X25519 ECDH 密钥交换 |
+| `hkdf.py` | HKDF-SHA256 密钥派生 |
+| `argon2.py` | Argon2id PSK 哈希 |
 
-### 安全特性
-- 路径遍历防护（os.path.realpath 校验）
-- 文件名冲突自动重命名（`file.txt` → `file (2).txt`）
-- 逐块 SHA-256 hash 校验 + 整体内容 hash 校验
-- 文件大小限制（默认 5GB）
+- **依赖：** cryptography, argon2-cffi
+- **被依赖：** protocol/
 
----
+## 协议层（protocol/）
 
-## 能力发现（S2 + S4）
-
-### AgentCard 数据结构
-
-```
-AgentCard
-├── name: str              # 唯一标识名
-├── description: str       # 人类可读描述
-├── version: str           # 语义化版本
-├── url: str               # 主通信端点
-├── capabilities: Capabilities  # frozen dataclass
-│   ├── streaming, push_notifications, task_management
-│   ├── file_transfer, group_communication
-│   └── max_message_size, supported_schemas (tuple)
-├── authentication: list[AuthScheme]  # 认证方案声明（不含凭证）
-│   └── AuthScheme.type: "psk" | "bearer" | "api_key" | "oauth2" | "mtls"
-├── skills: list[Skill]    # 技能列表
-│   └── Skill: id, name, description, input_schema, output_schema, tags
-├── endpoints: Endpoints?   # 可选多端点配置
-│   └── primary, streaming, file_transfer, health
-└── metadata: dict          # 自定义元数据
-```
-
-### AgentRegistry 注册中心
-
-```
-register(card)     → 注册 Agent（agent_name 唯一键）
-deregister(name)   → 注销 Agent
-get(name)          → 返回 AgentCard
-query(filter)      → 按技能/标签/能力/状态过滤
-list_online()       → 仅返回在线 Agent
-heartbeat(name)     → 续约（更新 expires_at）
-check_health()     → 过期标记 offline
-cleanup()           → 清理超期离线记录
-```
-
-### 心跳与生命周期
-
-```
-注册 → online (expires_at = now + TTL)
-         │
-    心跳续约 ──────────→ expires_at 延长
-         │
-    TTL 过期              check_health() → offline (offline_since = now)
-         │
-    offline_ttl 超时       cleanup() → 永久删除
-```
-
-### 存储
-
-- 内存 dict 作为主查询层（O(1) 查找）
-- SQLite 作为持久化层（启动时 load_from_store() 恢复）
-- 双写保证一致性：register/deregister/heartbeat/cleanup 同步更新两层
-
-### 关键组件
-
-| 组件 | 职责 |
+| 文件 | 职责 |
 |------|------|
-| AgentCard | 自描述数据结构，to_dict/from_dict 递归序列化 |
-| Capabilities | frozen dataclass，7 个能力字段，supported_schemas 使用 tuple 保证不可变 |
-| AgentRegistry | 注册/查询/心跳入口，内存 + SQLite 双写 |
-| AgentFilter | 按技能/标签/能力/状态过滤（OR 语义） |
-| RegistryStore | SQLite 持久化，find_expired/find_offline_expired 支持定时清理 |
+| `handshake.py` | 三重 DH 握手（initiate → respond → complete） |
+| `message.py` | 加密消息构建与解析（payload + replay tag） |
+| `rekey.py` | 密钥轮换（request → response → apply 闭环 + 旧密钥安全擦除） |
 
----
+- **依赖：** crypto/
+- **被依赖：** transport/
 
-## 异常体系（P2）
+## 管理层（managers/）
 
-```
-SIPError（基类，code + message + severity + recoverable + details）
-├── CryptoError
-│   ├── EncryptionError
-│   ├── DecryptionError
-│   └── KeyDerivationError
-├── ProtocolError
-│   ├── HandshakeError
-│   ├── SessionError
-│   └── ReplayError
-├── SchemaError
-│   ├── ValidationError
-│   └── SerializationError
-├── TransportError
-│   ├── ConnectionError
-│   └── TimeoutError
-├── FileTransferError
-│   ├── ChunkIntegrityError
-│   └── FileTooLargeError
-└── GroupError
-    ├── GroupMembershipError
-    └── GroupEncryptionError
-```
-
-所有异常支持 `to_dict()` / `SIPError.from_dict()` 序列化往返。
-
----
-
-## 模块依赖关系
-
-```
-transport/ ──→ protocol/ ──→ crypto/
-    │              │            │
-    │              └──→ managers/
-    │
-    └──→ schema/ ←── file_transfer/
-    └──→ discovery/（AgentCard + AgentRegistry）
-           │
-           └──→ exceptions.py（全局）
-```
-
-**依赖规则：**
-- 上层可调用下层，下层不可调用上层
-- 同层模块可相互调用（如 protocol/group → protocol/message）
-- exceptions.py 是全局叶子依赖，被所有模块引用
-
----
-
-## 数据流
-
-### 加密消息发送
-
-```
-SIPMessage → JSON 序列化 → bytes
-    → XChaCha20-Poly1305 加密（密文 + nonce + tag）
-    → 封装为 SIPEnvelope（payload = 密文）
-    → 传输层发送
-```
-
-### 加密消息接收
-
-```
-传输层接收 → SIPEnvelope
-    → nonce 重放检查（managers/nonce）
-    → XChaCha20-Poly1305 解密
-    → JSON 反序列化 → SIPMessage
-```
-
-### 文件传输
-
-```
-小文件: 文件路径 → read → base64 编码 → FileDataPart → 放入 SIPMessage.parts
-大文件: 文件路径 → 分块 + hash → LocalFileStore 存储 → FileManifest → FileRefPart
-```
-
----
-
-## 协议加固（P3）
-
-针对 e2ee-protocol.md 设计文档的 10 项差距，完成以下修复：
-
-### 安全修复
-- **Handshake** — 删除 `complete_handshake` 中重复的三重 DH 计算
-- **Resume** — 签名数据绑定 `message["sender_id"]`，与验证函数一致
-- **Nonce** — `set` 改为 `OrderedDict`，保证 FIFO 淘汰顺序
-
-### 加密加固
-- **群组 Double Ratchet** — `chain_key` 每条消息推进（`HKDF("message-key")` → `HKDF("chain-key")`），确保前向保密
-- **Skip Ratchet** — 乱序消息统一用 `chain-key` 标签推进 chain_key，非预生成路径存储 skip_key 供延迟解密
-- **Rekey** — 旧密钥通过 `ctypes.memset` 安全擦除（bytearray 类型），接收端计数器触发轮换检查
-- **Rekey 闭环** — `process_rekey_response` / `handle_rekey_request` / `get_pending_rekey_request` 方法补全 request→response→apply 流程
-
-### 功能补全
-- **版本协商** — 4 步协议：`create_version_offer` → `create_version_response` → `parse_version_response`（含 `local_supported` 验证）
-
----
-
-## 能力发现（S2 + S4）
-
-### 数据结构设计
-- **AgentCard.endpoints 可选** — 允许无端点声明的最小卡片，`to_dict/from_dict` 正确处理 None
-- **Capabilities.supported_schemas 使用 tuple** — frozen dataclass 不能有 mutable 默认值，序列化时转为 list
-- **AgentRegistration 移至 agent_card.py** — 消除 registry.py ↔ registry_store.py 循环导入
-- **register() 返回 card.name** — 比 UUID7 更直观，agent_name 已是唯一键
-
-### 存储设计
-- **内存 dict + SQLite 双写** — 内存 O(1) 查询，SQLite 持久化
-- **os.makedirs 自动创建** — RegistryStore 连接前确保父目录存在，CI 兼容
-- **cleanup() 使用 deleted set** — 防止 SQLite-only 和内存记录 double-count
-
----
-
-## 设计决策记录
-
-| 决策 | 原因 |
+| 文件 | 职责 |
 |------|------|
-| SIP 定位为加密层 | 不与应用层协议（A2A/MCP）耦合，作为透明加密通道 |
-| 信封与消息分离 | 加密层只需处理 bytes payload，不解析业务语义 |
-| FileRefPart / FileDataPart 分离 | 两种语义完全不同（引用 vs 内联），不应混为一谈 |
-| 纯同步 API | 降低复杂度，调用方可自行决定是否异步包装 |
-| 纯 stdlib（无 pydantic） | 减少依赖，dataclass + enum 足够 |
-| kwargs.setdefault() 异常继承 | 避免 from_dict 反序列化时 "multiple values for keyword argument" |
+| `session.py` | 会话状态管理（序列化/反序列化/过期检查） |
+| `nonce.py` | Nonce 管理器（OrderedDict FIFO 淘汰，防重放攻击） |
+
+- **依赖：** 无业务依赖
+- **被依赖：** protocol/, transport/
+
+## 传输层（transport/）
+
+| 文件 | 职责 |
+|------|------|
+| `encrypted_channel.py` | 加密通道（生命周期管理 + Rekey 闭环 + 接收端触发） |
+| `message.py` | Agent 消息格式（TEXT/ENCRYPTED/CONTROL） |
+| `sip_mcp_server.py` | MCP Server（stdio JSON-RPC，四工具） |
+
+- **依赖：** protocol/, crypto/, managers/
+- **被依赖：** 上层应用（OpenClaw 经 MCP 接入）
+
+---
+
+## MCP Server 四工具
+
+OpenClaw 等宿主经 stdio JSON-RPC 调用（`python -m sip_protocol --psk <key> --agent-id <id>`）：
+
+| 工具 | 职责 |
+|------|------|
+| `sip_handshake` | 三重 DH 握手（initiator / responder / complete 三角色） |
+| `sip_encrypt` | 加密消息（要求通道已建立） |
+| `sip_decrypt` | 解密消息（要求通道已建立） |
+| `sip_rekey` | 密钥轮换（initiator / responder 两角色） |
+
+注意：握手 `complete` 依赖同进程的 `initiator` 状态（Auth 消息绑定发起方临时密钥），
+宿主应使用长驻进程逐条收发请求。
+
+---
+
+## 安全机制
+
+| 机制 | 实现 |
+|------|------|
+| 端到端加密 | XChaCha20-Poly1305 AEAD（主）+ AES-256-GCM（备选） |
+| 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 |
+| 抗重放 | Nonce FIFO 淘汰 + 消息计数器 + Replay Tag |
+| 抗篡改 | AEAD 认证标签 |
+| 中间人防护 | PSK (Argon2id) 绑定 |
+| 时序攻击防护 | 恒定时间比较 |
+
+---
+
+## 历史模块（v2.0 移除）
+
+以下应用层模块在 v2.0 瘦身中移除，可在 git 历史（≤ v1.4.0）中回溯：
+
+- `schema/`（S1 结构化消息）、`file_transfer/`（F1 分块传输）
+- `discovery/`（S2+S4 AgentCard/AgentRegistry）
+- `protocol/` 中的 group、group_simple、decision、fragment、offline_queue、persistence、resume、version
+- `transport/` 中的 base、openclaw_adapter、hermes_claude_adapter、websocket_adapter
+- `javascript/` 早期实现

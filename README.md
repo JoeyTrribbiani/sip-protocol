@@ -1,43 +1,25 @@
-# SIP协议 - Swarm Intelligence Protocol
+# SIP 加密库
 
-> 端到端加密的多Agent通信协议 — Agent 通信的加密层（TLS for Agent Communication）
+> Secure Intelligence Protocol — Agent 间端到端加密通道（TLS for Agent Communication）
+> 纯加密层：不解析、不关心业务消息内容，业务层零侵入
 
-[![CI/CD](https://github.com/JoeyTrribbiani/sip-protocol/workflows/CI%2FCD/badge.svg)](https://github.com/JoeyTrribbiani/sip-protocol/actions)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
----
-
-## 概述
-
-SIP协议基于 Signal Double Ratchet，使用 XChaCha20-Poly1305 + X25519 + Triple DH，为多Agent提供端到端加密通道。SIP 不解析业务消息内容，定位为透明加密层。
-
-**技术栈：** Python 3.11+ / stdlib dataclasses + enum / cryptography / argon2-cffi
+[![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
+[![algorithm](https://img.shields.io/badge/AEAD-XChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
 ---
 
-## 架构
+## 算法清单
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    传输适配器层（transport）                  │
-│     WebSocket │ OpenClaw │ Hermes │ MCP Server              │
-├─────────────────────────────────────────────────────────────┤
-│                    协议层（protocol）                        │
-│     握手 │ 消息 │ 群组 │ Rekey │ 分片 │ 恢复 │ 决策        │
-├──────────────────┬──────────────────────────────────────────┤
-│ 结构化层（schema）│    能力发现层（discovery）│ 文件传输（F1）│
-│ Envelope │ Message│  Card │ Registry │  Config │ Store │ Manager │
-│ 8 种 Part       │                                       │
-├──────────────────┴──────────────────────────────────────────┤
-│                    管理层（managers）                        │
-│     会话状态 │ Nonce 防重放 │ 群组成员                       │
-├─────────────────────────────────────────────────────────────┤
-│                    加密原语层（crypto）                      │
-│  XChaCha20 │ AES-GCM │ X25519 │ HKDF │ Argon2             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
+| 用途 | 算法 | 模块 |
+|------|------|------|
+| 对称加密（主） | XChaCha20-Poly1305 AEAD | `crypto/xchacha20_poly1305.py` |
+| 对称加密（备选） | AES-256-GCM AEAD | `crypto/aes_gcm.py` |
+| 密钥交换 | X25519 ECDH（三重 DH） | `crypto/dh.py` |
+| 密钥派生 | HKDF-SHA256 | `crypto/hkdf.py` |
+| PSK 哈希 | Argon2id | `crypto/argon2.py` |
+| 防重放 | Nonce FIFO 淘汰 + 消息计数器 + Replay Tag | `managers/nonce.py` |
+| 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 | `protocol/handshake.py` `protocol/rekey.py` |
 
 ## 安装
 
@@ -52,136 +34,117 @@ uv pip install -e ".[dev]"
 pip install -e python/
 ```
 
----
+运行时依赖仅 `cryptography` 与 `argon2-cffi`，Python ≥ 3.11。
 
-## 快速开始
+## 快速上手
 
-### 消息结构化（S1 混合模式）
-
-```python
-from sip_protocol.schema.message import SIPMessage, create_message
-from sip_protocol.schema.envelope import SIPEnvelope
-from sip_protocol.schema.parts import TextPart
-
-# 创建结构化消息
-msg = create_message(
-    sender="agent-a",
-    recipient="agent-b",
-    parts=[TextPart(text="Hello, SIP!")],
-)
-
-# 封装进加密信封（payload 为 bytes，不解析内容）
-envelope = SIPEnvelope(
-    version="SIP-1.3",
-    payload=b"<encrypted_bytes>",
-    content_type="application/sip-message+json",
-    content_encoding="xchacha20-poly1305",
-    sender="agent-a",
-    recipient="agent-b",
-    session_id="session-001",
-)
-```
-
-### 文件传输（F1）
+### 加密通道（推荐入口）
 
 ```python
-from sip_protocol.file_transfer import FileTransferManager, FileTransferConfig
+from sip_protocol.transport import EncryptedChannel
 
-config = FileTransferConfig(inline_threshold=4096, chunk_size=1048576)
-manager = FileTransferManager(config=config)
+psk = b"shared-psk-between-two-agents"  # 生产环境从安全渠道获取
 
-# 发送文件（小文件 → FileDataPart 内联，大文件 → FileRefPart 引用）
-part = manager.send_file("/path/to/report.pdf")
+channel_a = EncryptedChannel(agent_id="agent-a", psk=psk)
+channel_b = EncryptedChannel(agent_id="agent-b", psk=psk)
 
-# 接收文件（自动校验块 hash、路径遍历防护、文件名冲突重命名）
-manager.receive_file(part, "/output/path/report.pdf")
+# 1. 三重 DH 握手（hello/auth 消息经任意载体传给对方）
+hello = channel_a.initiate()
+auth = channel_b.respond_to_handshake(hello)
+channel_a.complete_handshake(auth)
+
+# 2. 加密 → 解密
+msg = channel_a.send("你好，Agent B！", "agent-b")
+assert channel_b.receive(msg) == "你好，Agent B！"
+
+# 3. 手动 Rekey（也可配置 rekey_after_messages / rekey_after_seconds 自动触发）
+from sip_protocol.protocol.rekey import RekeyManager
+
+mgr_a = RekeyManager(channel_a.session_keys, is_initiator=True)
+req = mgr_a.create_rekey_request(reason="manual")
+
+mgr_b = RekeyManager(channel_b.session_keys, is_initiator=False)
+assert mgr_b.validate_rekey_request(req)
+resp = mgr_b.process_rekey_request(req)
+
+new_keys_a = mgr_a.process_rekey_response(resp)
+mgr_a.apply_new_keys(new_keys_a)
+mgr_b.apply_new_keys(mgr_b.temp_new_keys)
 ```
 
-### 能力发现（S2 + S4）
+### 协议层原语
 
 ```python
-from sip_protocol.discovery import AgentCard, AgentRegistry, Capabilities, Endpoints
+from sip_protocol.protocol.handshake import initiate_handshake, respond_handshake, complete_handshake
+from sip_protocol.protocol.message import encrypt_message, decrypt_message
 
-# 创建 Agent 自描述卡片
-card = AgentCard(
-    name="search-agent",
-    description="Web search agent",
-    version="1.0.0",
-    url="wss://search.example.com/ws",
-    capabilities=Capabilities(streaming=True),
-    endpoints=Endpoints(primary="wss://search.example.com/ws"),
+psk = b"shared-psk-between-two-agents"
+hello, state_a = initiate_handshake(psk)
+auth, state_b, keys_b = respond_handshake(hello, psk)
+keys_a, session_state = complete_handshake(auth, state_a)
+
+enc = encrypt_message(
+    keys_a["encryption_key"], "hello", "agent-a", "agent-b",
+    counter=1, replay_key=keys_a["replay_key"],
 )
-
-# 注册到本地注册中心
-registry = AgentRegistry()
-registry.register(card)
-
-# 按技能查询
-from sip_protocol.discovery import AgentFilter
-results = registry.query(AgentFilter(skills=["search"]))
-
-# 心跳续约（TTL 内保持 online）
-registry.heartbeat("search-agent")
+assert decrypt_message(keys_b["encryption_key"], enc) == "hello"
 ```
 
----
+## API 参考
 
-## 模块概览
+| 模块 | 主要入口 | 说明 |
+|------|---------|------|
+| `crypto/` | `encrypt_xchacha20_poly1305` / `generate_keypair` / `hkdf` / `hash_psk` | 加密原语，可独立使用 |
+| `protocol/` | `initiate_handshake` / `encrypt_message` / `RekeyManager` | 三重 DH、消息加解密、密钥轮换 |
+| `managers/` | `SessionState` / `NonceManager` | 会话状态、防重放 |
+| `transport/` | `EncryptedChannel` / `AgentMessage` / `SipMcpServer` | 加密通道、消息格式、MCP Server |
+| `exceptions.py` | `SIPError` 及分层子类 | 全局异常体系 + 错误注册表 |
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| `crypto/` | ✅ 完成 | XChaCha20-Poly1305, AES-256-GCM, X25519, HKDF, Argon2 |
-| `protocol/` | ✅ 完成 | Triple DH 握手、群组 Double Ratchet + Skip Ratchet、Rekey 闭环、版本协商 |
-| `managers/` | ✅ 完成 | 会话状态、Nonce 防重放、群组成员 |
-| `schema/` | ✅ 完成（S1） | SIPEnvelope + SIPMessage 混合模式、8 种 Part 类型 |
-| `discovery/` | ✅ 完成（S2+S4） | AgentCard 自描述、AgentRegistry 注册中心（内存+SQLite双写） |
-| `file_transfer/` | ✅ 完成（F1） | 分块存储、FileRefPart/FileDataPart 引用策略 |
-| `transport/` | ✅ 完成 | 加密通道、WebSocket/OpenClaw/Hermes/MCP 适配器 |
-| `exceptions.py` | ✅ 完成（P2） | 17 个分层异常 + 错误注册表 |
+架构详见 [docs/architecture.md](./docs/architecture.md)，协议权威规范见 [docs/e2ee-protocol.md](./docs/e2ee-protocol.md)。
 
-完整架构详见 [AGENTS.md](./AGENTS.md) 和 [docs/architecture.md](./docs/architecture.md)。
+### MCP Server（四工具）
 
----
+OpenClaw 等宿主经 stdio JSON-RPC 接入：
+
+```bash
+python -m sip_protocol --psk <shared-key> --agent-id <agent-id>
+```
+
+| 工具 | 职责 |
+|------|------|
+| `sip_handshake` | 三重 DH 握手（initiator / responder / complete 三角色） |
+| `sip_encrypt` | 加密消息（要求通道已建立） |
+| `sip_decrypt` | 解密消息（要求通道已建立） |
+| `sip_rekey` | 密钥轮换（initiator / responder 两角色） |
+
+注意：握手 `complete` 依赖同进程的 `initiator` 状态，宿主应使用长驻进程逐条收发请求。
+
+## 安全注意事项
+
+- **PSK 管理** — PSK 经 Argon2id 哈希后参与三重 DH，用于中间人防护；生产环境 PSK 不得硬编码进代码或入库
+- **恒定时间比较** — 认证标签与 replay tag 均使用恒定时间比较，防时序攻击
+- **旧密钥擦除** — Rekey 应用新密钥后旧密钥经 `ctypes.memset` 安全擦除
+- **重放窗口** — Nonce 管理器 FIFO 淘汰 + 时间戳验证，超窗消息拒绝
+- **未覆盖** — 本库不做密钥托管、设备指纹与后量子安全；后量子 KEX 见 [设计稿](./docs/superpowers/specs/2026-04-22-post-quantum-kex-design.md)
+- **漏洞披露** — 安全问题请勿直接开公开 Issue，参见 [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## 质量指标
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 630 passed, 36 skipped |
-| 覆盖率 | 83% |
+| 测试用例 | 207 passed |
+| 覆盖率 | 88% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |
 | Black | clean |
 
----
-
-## 安全
-
-- **端到端加密** — XChaCha20-Poly1305（主）+ AES-256-GCM（备选）
-- **前向保密** — Signal Double Ratchet（chain_key 推进）+ Skip Ratchet（乱序处理）+ Triple DH
-- **密钥轮换** — Rekey 闭环（request → response → apply）+ 旧密钥安全擦除
-- **抗重放** — Nonce FIFO 淘汰 + Replay Tag
-- **抗篡改** — AEAD 认证标签
-- **中间人防护** — PSK (Argon2id) 验证
-- **时序攻击防护** — 恒定时间比较
-
----
-
 ## 贡献
 
-详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
-
-**开发规范：** Black + Pylint 10.00 + MyPy strict + pytest 80%+
-
-**开发流程：** Fork → 创建分支 → 编写代码和测试 → PR
-
----
+详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。开发规范：Black + Pylint 10.00 + MyPy + pytest。
 
 ## 许可证
 
 Apache License 2.0 — 详见 [LICENSE](./LICENSE)
-
----
 
 ## 致谢
 
