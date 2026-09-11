@@ -30,14 +30,13 @@
 ## 安装
 
 ```bash
-# 使用 uv（推荐）
-cd python
+# 使用 uv（推荐，仓库根执行）
 uv venv --python 3.11 .venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
 
 # 或使用 pip
-pip install -e python/
+pip install -e .
 ```
 
 运行时依赖仅 `cryptography` 与 `argon2-cffi`，Python ≥ 3.11。

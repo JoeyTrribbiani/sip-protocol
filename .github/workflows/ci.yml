@@ -13,9 +13,6 @@ jobs:
   python-test:
     name: Python Lint + Type + Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./python
 
     steps:
     - name: Checkout code
@@ -55,7 +52,7 @@ jobs:
     - name: Upload coverage
       uses: codecov/codecov-action@v4
       with:
-        files: ./python/coverage.xml
+        files: ./coverage.xml
 
   security-audit:
     name: Security Audit
@@ -74,12 +71,10 @@ jobs:
     # L5 安全审计（runner 管理的包不阻塞 CI：CVE-2026-3219 为 pip 自身误报；
     # PYSEC-2026-3447 为 runner 预装 setuptools 79.0.1 < 修复版 83.0.0，非项目依赖）
     - name: Install Python dependencies
-      working-directory: ./python
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
     - name: Python audit
-      working-directory: ./python
       run: pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2026-3447
