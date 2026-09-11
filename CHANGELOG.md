@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 变更（封装标准化，零功能改动）
+
+- **布局扁平化（ed1dcac）** — `python/` 嵌套子项目上提根级单包
+  （`src/` `tests/` `examples/` `pyproject.toml` `uv.lock` 居根级），对齐
+  rf-ops-library 分发库标准；加密核心 git mv 纯 rename 零字节改动，
+  239 测试/89% 覆盖率与基线一致；删冗余副本 python/README.md、
+  python/CONTRIBUTING.md、python/.gitignore；CI working-directory、
+  codecov 路径、lib/index.mjs 提示、README/CONTRIBUTING/AGENTS.md 引用同步
+- **依赖锁定统一 uv（1861674）** — dev 依赖迁移 pyproject
+  `[dependency-groups]`（并集 requirements-dev.txt，补 CI 在用的 pip-audit），
+  删 requirements*.txt 双轨；uv.lock 刷新（62 packages）；CI 重写为
+  `uv sync --frozen`（本地=CI 同命令）→ black/pylint/mypy → pytest →
+  `uv build` + wheel 清单核验（24 py 全数断言）→ pip-audit；
+  pyproject 显式 src-layout `package-dir`
+- **外部通路复验** — MCP editable 重装（`python3.11 -m sip_protocol` 寻址
+  根级 src/）、dsh 壳 pnpm link 与 lib/index.mjs spawn 链路不受影响
+
 ### 修复
 
 - **CI Security Audit（run#83）** — runner 预装 setuptools 79.0.1 触发
