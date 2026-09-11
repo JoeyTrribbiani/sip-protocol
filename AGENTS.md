@@ -5,7 +5,7 @@
 ## 目录结构
 
 ```
-sip-protocol/                     # 根级单包布局（v2.2 扁平化，对齐 rf 家族分发库标准）
+sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，对齐 rf 家族分发库标准）
 ├── src/sip_protocol/
 │   ├── __init__.py                # 包入口，__version__ = 2.1.0
 │   ├── __main__.py                # MCP 入口（python -m sip_protocol）
