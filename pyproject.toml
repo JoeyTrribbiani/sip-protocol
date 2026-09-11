@@ -37,13 +37,16 @@ dependencies = [
     "argon2-cffi>=23.0.0",
 ]
 
-[project.optional-dependencies]
+# 开发依赖统一进 dependency-groups（PEP 735，uv sync 默认安装；
+# 并集自原 optional-dependencies.dev + requirements-dev.txt，含 CI 用的 pip-audit）
+[dependency-groups]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "black>=23.0.0",
     "pylint>=3.0.0",
     "mypy>=1.5.0",
+    "pip-audit>=2.6.0",
     "pre-commit>=3.4.0",
 ]
 
@@ -51,6 +54,10 @@ dev = [
 Homepage = "https://github.com/JoeyTrribbiani/sip-protocol"
 Repository = "https://github.com/JoeyTrribbiani/sip-protocol"
 Documentation = "https://github.com/JoeyTrribbiani/sip-protocol/tree/main/docs"
+
+[tool.setuptools]
+# src-layout 显式声明（python-project-standard 封装检查项）
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

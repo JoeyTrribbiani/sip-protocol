@@ -1,7 +1,9 @@
 name: CI
 
-# python-ci-standard 档位 A（分发库）: L1 依赖安装 / L2 静态检查 / L3 类型检查
-# L4 测试+覆盖率 / L5 安全审计；L6 性能为可选未启用（纯加密核心以 pytest 覆盖）
+# python-ci-standard 档位 A（分发库）: L1 依赖安装（uv --frozen 精确复现）
+# L2 静态检查 / L3 类型检查 / L4 测试+覆盖率 / L5 安全审计
+# 档位 A 打包验证（python-project-standard #7/#8）：wheel 文件清单核验
+# L6 性能为可选未启用（纯加密核心以 pytest 覆盖）
 
 on:
   push:
@@ -9,50 +11,66 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  UV_VERSION: "0.9"
+
 jobs:
   python-test:
-    name: Python Lint + Type + Test
+    name: Python Lint + Type + Test + Build
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
       with:
-        python-version: '3.11'
-        cache: 'pip'
+        version: ${{ env.UV_VERSION }}
+        enable-cache: true
 
-    # L1 依赖安装
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+    # L1 依赖安装：uv + 锁文件精确复现（本地与 CI 同命令）
+    - name: Sync dependencies (frozen)
+      run: uv sync --frozen
 
-    - name: Install project
-      run: pip install -e .
-
-    # L2 静态检查
+    # L2 静态检查（black 格式 + pylint 10.00 基线，工具链冻结见 AGENTS.md）
     - name: Run Black
-      run: black src/sip_protocol/ --check
+      run: uv run black src/sip_protocol/ --check
 
     - name: Run Pylint
-      run: pylint src/sip_protocol/
+      run: uv run pylint src/sip_protocol/
 
     # L3 类型检查
     - name: Run MyPy
-      run: mypy src/sip_protocol/
+      run: uv run mypy src/sip_protocol/
 
-    # L4 测试 + 覆盖率
+    # L4 测试 + 覆盖率（cov 参数由 pyproject [tool.pytest.ini_options] addopts 统一）
     - name: Run tests
-      run: pytest tests/ --cov=src/sip_protocol --cov-report=xml --cov-report=term
+      run: uv run pytest tests/
 
     - name: Upload coverage
       uses: codecov/codecov-action@v4
       with:
         files: ./coverage.xml
+
+    # 档位 A 打包验证：build 后打开 whl 核验文件清单（防 address.txt 型漏文件）
+    - name: Build & verify wheel contents
+      run: |
+        uv build
+        uv run python - <<'EOF'
+        import zipfile, glob
+        whl = glob.glob("dist/*.whl")[0]
+        names = zipfile.ZipFile(whl).namelist()
+        py = [n for n in names if n.endswith(".py")]
+        assert "sip_protocol/__init__.py" in names, "缺包根 __init__"
+        assert "sip_protocol/filetransfer/packer.py" in names, "缺 filetransfer/packer"
+        assert "sip_protocol/filetransfer/unpacker.py" in names, "缺 filetransfer/unpacker"
+        assert "sip_protocol/transport/sip_mcp_server.py" in names, "缺 MCP server"
+        assert "sip_protocol/protocol/rekey.py" in names, "缺 rekey"
+        assert len(py) == 24, f"py 文件数目异常: {len(py)}（预期 24）"
+        assert not any(n.startswith("tests/") for n in names), "wheel 混入测试"
+        print(f"wheel 清单核验通过: {len(names)} 个文件, {len(py)} 个 .py")
+        EOF
 
   security-audit:
     name: Security Audit
@@ -62,19 +80,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
       with:
-        python-version: '3.11'
-        cache: 'pip'
+        version: ${{ env.UV_VERSION }}
+        enable-cache: true
+
+    - name: Sync dependencies (frozen)
+      run: uv sync --frozen
 
     # L5 安全审计（runner 管理的包不阻塞 CI：CVE-2026-3219 为 pip 自身误报；
     # PYSEC-2026-3447 为 runner 预装 setuptools 79.0.1 < 修复版 83.0.0，非项目依赖）
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
-
     - name: Python audit
-      run: pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2026-3447
+      run: uv run pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2026-3447
