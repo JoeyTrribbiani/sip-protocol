@@ -5,18 +5,20 @@
 ## 目录结构
 
 ```
-sip-protocol/
-├── python/                        # 主实现语言（Python 3.11+）
-│   └── src/sip_protocol/
-│       ├── __init__.py            # 包入口，__version__ = 2.1.0
-│       ├── __main__.py            # MCP 入口（python -m sip_protocol）
-│       ├── exceptions.py          # 全局异常体系（分层异常 + 错误注册表）
-│       ├── crypto/                # 加密原语层
-│       ├── protocol/              # 协议层（握手/消息/Rekey）
-│       ├── managers/              # 会话与 nonce 管理
-│       ├── transport/             # 加密通道与 MCP Server
-│       └── filetransfer/          # 加密文件工件（应用层，.sipft）
+sip-protocol/                     # 根级单包布局（v2.2 扁平化，对齐 rf 家族分发库标准）
+├── src/sip_protocol/
+│   ├── __init__.py                # 包入口，__version__ = 2.1.0
+│   ├── __main__.py                # MCP 入口（python -m sip_protocol）
+│   ├── exceptions.py              # 全局异常体系（分层异常 + 错误注册表）
+│   ├── crypto/                    # 加密原语层
+│   ├── protocol/                  # 协议层（握手/消息/Rekey）
+│   ├── managers/                  # 会话与 nonce 管理
+│   ├── transport/                 # 加密通道与 MCP Server
+│   └── filetransfer/              # 加密文件工件（应用层，.sipft）
+├── tests/                         # pytest 测试（239 用例）
+├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
 ├── docs/                          # 文档（architecture + e2ee-protocol + 3 个设计稿）
+├── pyproject.toml + uv.lock       # 打包与依赖锁定（根级）
 ├── CHANGELOG.md                   # 变更日志
 ├── CONTRIBUTING.md                # 贡献指南
 └── README.md                      # 项目简介
