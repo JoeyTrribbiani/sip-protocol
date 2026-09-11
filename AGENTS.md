@@ -15,13 +15,18 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 │   ├── managers/                  # 会话与 nonce 管理
 │   ├── transport/                 # 加密通道与 MCP Server
 │   └── filetransfer/              # 加密文件工件（应用层，.sipft）
-├── tests/                         # pytest 测试（239 用例）
+├── tests/                         # pytest 测试（283 用例，含 interop/版本/规范索引校验）
+│   └── vectors/                   # 互操作测试向量（主库导出，参考实现消费）
+├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
-├── docs/                          # 文档（architecture + e2ee-protocol + 3 个设计稿）
+├── docs/
+│   ├── SPEC.md                    # SIP-1.0 线格式权威规范（含交叉索引 + 偏差登记 D1-D8）
+│   ├── architecture.md / e2ee-protocol.md（历史设计稿，被 SPEC 取代）/ 3 个设计稿
 ├── pyproject.toml + uv.lock       # 打包与依赖锁定（根级）
 ├── CHANGELOG.md                   # 变更日志
 ├── CONTRIBUTING.md                # 贡献指南
-└── README.md                      # 项目简介
+├── SECURITY.md                    # 安全策略（披露入口/攻击面/支持版本）
+└── README.md                      # 项目简介（含治理节）
 ```
 
 ## 模块职责
@@ -97,5 +102,10 @@ transport/ ──→ protocol/ ──→ crypto/
 - **异常继承链** — kwargs.setdefault() 避免序列化冲突
 - **Pylint 10.00/10** — max-args=7，用 MessageOptions 绕过
 - **MCP 四工具行为冻结** — sip_handshake/sip_encrypt/sip_decrypt/sip_rekey 不得变更响应结构（黄金基线管控）
+- **规范优先（SPEC-first）** — wire 格式/密钥调度/错误语义变更必须先改 docs/SPEC.md 并同步
+  §14 交叉索引（tests/test_spec_index.py 机器校验）与互操作向量（scripts/interop/generate_vectors.py）；
+  规范↔代码偏差登记在 SPEC §13（D1-D8），如实记述不擅改
+- **SIP = Secure Inter-agent Protocol** — 与 RFC 3261 (VoIP SIP) 无关；历史展开 "Secure Intelligence Protocol" 停用
+- **版本字段强制** — SIP-1.0 / SIP-TRANSPORT-1.0 / SIPFT1.0 三层版本不匹配一律拒绝（SPEC §11.2）
 - **MCP 入口** — `python3.11 -m sip_protocol --psk <key> --agent-id <id>`（openclaw.json 通路，改造不可破坏）
 - **v2.0 已移除** — schema/discovery/group/decision/fragment/offline_queue/persistence/resume/version/各平台适配器/javascript（git 历史 ≤ v1.4.0 可回溯）；file_transfer 已于 v2.1 以 `filetransfer/` 按新架构重建

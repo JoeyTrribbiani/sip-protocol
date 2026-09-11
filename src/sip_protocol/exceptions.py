@@ -171,8 +171,12 @@ class RekeyError(ProtocolError):
 
 @_register_error
 @dataclass
-class VersionNegotiationError(ProtocolError):
-    """协议版本协商失败"""
+class VersionNegotiationError(ProtocolError, ValueError):
+    """协议版本协商失败
+
+    双继承 ValueError：保持既有 except ValueError 捕获路径兼容
+    （MCP 错误映射 -32005 / 通道层统一异常处理），SPEC §11.2。
+    """
 
     def __init__(self, message: str = "协议版本协商失败", **kwargs: Any) -> None:
         kwargs.setdefault("code", "SIP-PROTO-003")
@@ -204,8 +208,12 @@ class MessageError(SIPError):
 
 @_register_error
 @dataclass
-class MessageSchemaError(MessageError):
-    """消息Schema验证失败"""
+class MessageSchemaError(MessageError, ValueError):
+    """消息Schema验证失败
+
+    双继承 ValueError：parse_raw_message 等既有 ValueError 捕获路径无需改动
+    即可包装本错误，SPEC §11.2。
+    """
 
     def __init__(self, message: str = "消息Schema验证失败", **kwargs: Any) -> None:
         kwargs.setdefault("code", "SIP-MSG-001")

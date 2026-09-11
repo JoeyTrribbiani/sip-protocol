@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增（协议化改造：让它成为名副其实的协议）
+
+- **`docs/SPEC.md` — SIP-1.0 线格式权威规范（SPEC v1.0，Experimental/Living）**
+  - 从 v2.1.0 实现逐字节反推：术语/角色、三重 DH 握手状态机与消息字段表、
+    Auth HMAC transcript 字节级定义（含 json.dumps 分隔符复刻）、密钥调度标签树、
+    会话消息 wire 格式与接收端五步处理顺序、Rekey 消息/验证/派生/切换时序、
+    SIPFT1.0 二进制布局偏移表与 AAD tag 链、错误码全表（标注 wire 使用现状）、
+    版本协商与演进策略（fail-closed，拒绝行为 MUST 化）、安全考虑
+  - **§13 实现偏差登记 D1-D8**：XChaCha 命名 vs ChaCha20 实现、Argon2 固定盐、
+    NonceManager 未接线、协议路径 ValueError vs SIP-xxx 码、Complete 回执无验证路径、
+    bytes 擦除限制等——如实记述不擅改
+  - **§14 规范↔测试交叉索引**：每个章节列出对应测试文件/用例，
+    `tests/test_spec_index.py` 机器校验引用真实性（防规范-测试漂移）
+  - 取代 docs/e2ee-protocol.md 作为权威文档（后者保留为历史设计稿）
+- **互操作第二实现 `scripts/interop/reference_impl.py` + 测试向量**
+  - 参考实现仅依 SPEC 反推（零 import 主库；HKDF 按 RFC 5869 自实现；
+    X25519/ChaCha20-Poly1305/Argon2id 作原语复用），覆盖握手双侧/消息/rekey/SIPFT
+  - `scripts/interop/generate_vectors.py` 从主库捕获握手中间态/私钥/密文/tag →
+    `tests/vectors/sip_test_vectors.json`（确定性 nonce/file_id 注入）
+  - `tests/test_interop.py` 26 用例：静态向量回放 + CI 即时重建（fresh-ci 参数化，
+    生成→参考实现消费→双向断言）+ 活体对话（握手→双向消息→双向 rekey→信封层往返）
+    + 负路径（篡改签名/密文/replay_tag/计数器重放/错版本/工件篡改，双方必拒）
+  - 参考实现按 SPEC 独立实现全程未遇规范歧义（无回修）
+- **`SECURITY.md`** — 攻击面/信任模型、支持版本、私有披露入口与响应时限、
+  draft 披露政策（GitHub 自动识别展示安全报告入口）
+- **README 治理节** — 规范优先流程、维护承诺、路线图（SPEC §13 收敛/PQ KEX）、
+  非目标、互操作接入方式
+
+### 变更
+
+- **命名消歧（零改名）** — SIP 统一展开为 **Secure Inter-agent Protocol**
+  （README 首段/SPEC 术语节/pyproject description/仓库 description+topics），
+  显式声明与 IETF RFC 3261（VoIP Session Initiation Protocol）无关：无关联无衍生；
+  历史展开 "Secure Intelligence Protocol" 停用
+- **版本字段强制校验（SPEC §11.2 / 偏差 D7，唯一功能改动，4 文件）**
+  - 审计结论：`SIP-1.0`/`SIP-TRANSPORT-1.0` 版本串此前只写不读（工件魔数例外）
+  - `respond_handshake`/`complete_handshake` 入口校验 → `VersionNegotiationError`
+    （SIP-PROTO-003 首次生效；双继承 ValueError 保持既有捕获路径/MCP -32005 映射）
+  - `validate_rekey_request/response` 校验版本 → False（bool 语义一致）
+  - `AgentMessage.from_dict` 信封版本校验 → `MessageSchemaError`（SIP-MSG-001 首次生效），
+    lenient-on-absent / strict-on-wrong
+  - 单版本协议无降级协商，拒绝先于任何密码学计算
+- **README 诚实化** — AEAD 徽章/算法表/dsh 描述按实现更正为 ChaCha20-Poly1305
+  （RFC 8439，指向 SPEC D1）；测试计数 239→283；漏洞披露指向 SECURITY.md
+
+### 测试
+
+- 239 → **283 passed**（+15 版本校验 +26 互操作 +3 规范索引机器校验），覆盖率 89%
+  保持；pylint 10.00 / mypy 0 errors / black clean / wheel 24 py 核验不变
+
 ### 修复
 
 - **CI Security Audit（uv sync --frozen 首跑）** — 切冻结安装后暴露 uv.lock

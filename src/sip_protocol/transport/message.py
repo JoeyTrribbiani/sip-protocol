@@ -17,6 +17,10 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from dataclasses import dataclass, field, asdict
 
+from ..exceptions import MessageSchemaError
+
+ENVELOPE_VERSION = "SIP-TRANSPORT-1.0"
+
 
 class MessageType(str, Enum):
     """消息类型枚举"""
@@ -71,7 +75,7 @@ class AgentMessage:
     """
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    version: str = "SIP-TRANSPORT-1.0"
+    version: str = ENVELOPE_VERSION
     type: MessageType = MessageType.TEXT
     sender_id: str = ""
     recipient_id: str = ""
@@ -100,6 +104,10 @@ class AgentMessage:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AgentMessage":
         """从字典反序列化"""
+        # 信封版本校验（SPEC §11.2：不认识的版本拒绝；缺省视为本版本）
+        version = data.get("version", ENVELOPE_VERSION)
+        if version != ENVELOPE_VERSION:
+            raise MessageSchemaError(message=f"不支持的信封版本: {version}")
         # 处理枚举类型
         if isinstance(data.get("type"), str):
             data["type"] = MessageType(data["type"])

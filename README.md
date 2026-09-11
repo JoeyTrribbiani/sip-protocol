@@ -1,13 +1,20 @@
 # SIP 加密库
 
-> Secure Intelligence Protocol — Agent 间端到端加密通道（TLS for Agent Communication）
+> **SIP = Secure Inter-agent Protocol** — Agent 间端到端加密通道（TLS for Agent Communication）
 > 纯加密层：不解析、不关心业务消息内容，业务层零侵入
+>
+> 命名声明：本项目的 SIP 指 Secure Inter-agent Protocol，与 IETF RFC 3261 定义的
+> SIP（Session Initiation Protocol，VoIP 会话发起协议）**无关**——无关联、无衍生、
+> 不共享任何语义或线格式。
+>
+> 协议是正式的：线格式权威规范见 **[docs/SPEC.md](./docs/SPEC.md)**（SPEC v1.0，
+> 字节级定义 + 规范↔测试交叉索引 + 独立参考实现互操作验证）。
 
 [![CI](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/JoeyTrribbiani/sip-protocol/badge.svg)](https://codecov.io/gh/JoeyTrribbiani/sip-protocol)
 [![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![cryptography](https://img.shields.io/badge/cryptography-41%2B-blue.svg)](https://github.com/pyca/cryptography)
-[![AEAD](https://img.shields.io/badge/AEAD-XChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/)
+[![AEAD](https://img.shields.io/badge/AEAD-ChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/html/rfc8439)
 [![pytest](https://img.shields.io/badge/pytest-7.4%2B-brightgreen.svg)](https://docs.pytest.org/)
 [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
@@ -18,12 +25,12 @@
 
 | 用途 | 算法 | 模块 |
 |------|------|------|
-| 对称加密（主） | XChaCha20-Poly1305 AEAD | `crypto/xchacha20_poly1305.py` |
-| 对称加密（备选） | AES-256-GCM AEAD | `crypto/aes_gcm.py` |
+| 对称加密（主） | ChaCha20-Poly1305 AEAD（RFC 8439，12 字节随机 nonce；模块名 `xchacha20_poly1305`，见 [SPEC D1](./docs/SPEC.md)） | `crypto/xchacha20_poly1305.py` |
+| 对称加密（备选） | AES-256-GCM AEAD（独立原语，无 wire 路径） | `crypto/aes_gcm.py` |
 | 密钥交换 | X25519 ECDH（三重 DH） | `crypto/dh.py` |
 | 密钥派生 | HKDF-SHA256 | `crypto/hkdf.py` |
 | PSK 哈希 | Argon2id | `crypto/argon2.py` |
-| 防重放 | Nonce FIFO 淘汰 + 消息计数器 + Replay Tag | `managers/nonce.py` |
+| 防重放 | Replay Tag（HMAC） + 消息计数器单调递增 + 时间戳窗 + Nonce FIFO（原语，见 SPEC §8/D3） | `managers/nonce.py` |
 | 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 | `protocol/handshake.py` `protocol/rekey.py` |
 | 加密文件 | SIPFT1.0：流式分块 AEAD + HKDF 块独立密钥 + tag 链防篡改重排 | `filetransfer/` |
 
@@ -128,7 +135,9 @@ out = unpack_file(result.artifact_path, master_key)   # 校验全链后才落盘
 | `filetransfer/` | `pack_file` / `unpack_file` | 加密文件工件（应用层，仅依赖 crypto 原语） |
 | `exceptions.py` | `SIPError` 及分层子类 | 全局异常体系 + 错误注册表 |
 
-架构详见 [docs/architecture.md](./docs/architecture.md)，协议权威规范见 [docs/e2ee-protocol.md](./docs/e2ee-protocol.md)。
+架构详见 [docs/architecture.md](./docs/architecture.md)，**线格式权威规范见 [docs/SPEC.md](./docs/SPEC.md)**
+（字节级消息定义、密钥调度、错误码全表、版本演进策略、规范↔测试交叉索引；
+历史设计稿 [docs/e2ee-protocol.md](./docs/e2ee-protocol.md) 保留供参考）。
 
 ### MCP Server（四工具）
 
@@ -151,7 +160,7 @@ python -m sip_protocol --psk <shared-key> --agent-id <agent-id>
 
 本仓库根即一个 dsh 插件（`dsh-sip-protocol`，零部署纯声明式）：
 `package.json` + `cordis.patch.yml` + `lib/index.mjs`。注册 agent 工具
-`sip_encrypt` / `sip_decrypt`（XChaCha20-Poly1305 AEAD 一次性加解密）与
+`sip_encrypt` / `sip_decrypt`（ChaCha20-Poly1305 AEAD 一次性加解密，见 SPEC D1）与
 `encrypted_file_pack` / `encrypted_file_unpack`（SIPFT1.0 流式加密文件工件），
 每次调用 spawn Python，不守护服务进程。前置条件：解释器可导入 `sip_protocol`
 （默认 `python3.11`，可用 `SIP_PYTHON` 覆盖）。
@@ -167,14 +176,31 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路�
 - **恒定时间比较** — 认证标签与 replay tag 均使用恒定时间比较，防时序攻击
 - **旧密钥擦除** — Rekey 应用新密钥后旧密钥经 `ctypes.memset` 安全擦除
 - **重放窗口** — Nonce 管理器 FIFO 淘汰 + 时间戳验证，超窗消息拒绝
-- **未覆盖** — 本库不做密钥托管、设备指纹与后量子安全；后量子 KEX 见 [设计稿](./docs/superpowers/specs/2026-04-22-post-quantum-kex-design.md)
-- **漏洞披露** — 安全问题请勿直接开公开 Issue，参见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **版本强制** — 不认识的协议/信封/工件版本在任何密码学计算之前拒绝（SPEC §11.2）
+- **未覆盖** — 本库不做密钥托管、设备指纹与后量子安全；后量子 KEX 见 [设计稿](./docs/superpowers/specs/2026-04-22-post-quantum-kex-design.md)；完整威胁模型与已知限制见 [SPEC §12](./docs/SPEC.md)
+- **漏洞披露** — 安全问题请勿直接开公开 Issue，走私有安全报告入口，见 [SECURITY.md](./SECURITY.md)
+
+## 治理
+
+**规范优先**：协议行为变更（wire 格式/密钥调度/错误语义）必须先改
+[SPEC.md](./docs/SPEC.md) 并同步交叉索引（`tests/test_spec_index.py` 机器校验），
+互操作测试向量随之再生成——规范、实现、测试三方一致才算数。
+
+- **维护承诺** — 主线维护 encryption-only 架构（v2.0 起）；CI 五层（uv 锁定安装 /
+  Black+Pylint 10.00 / MyPy / pytest+覆盖率 / pip-audit）+ wheel 清单核验全绿才可合入；
+  安全问题响应时限见 [SECURITY.md](./SECURITY.md)
+- **路线图** — SPEC §13 登记项的渐进收敛（AEAD 命名与实现对齐、NonceManager 接线
+  或移除、协议路径错误码化）；后量子 KEX（设计稿已有）；真 XChaCha20（随 SIP-2.0 评估）
+- **非目标** — 不做消息内容解析/业务编排/平台适配/群组/分片（v2.0 已移除，git 历史
+  ≤ v1.4.0 可回溯）；不做后量子（当前版本）；不做传输层本身（TCP/WS/消息队列由宿主选型）
+- **互操作** — `scripts/interop/reference_impl.py` 为规范级第二实现（不读主库源码），
+  `tests/vectors/` 测试向量供任意第三方实现自验；欢迎其它语言的独立实现接入向量集
 
 ## 质量指标
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 239 passed |
+| 测试用例 | 283 passed（含 26 互操作 + 3 规范索引校验） |
 | 覆盖率 | 89% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |
@@ -192,5 +218,6 @@ Apache License 2.0 — 详见 [LICENSE](./LICENSE)
 
 - Signal Protocol: https://signal.org/docs/
 - X25519: https://cr.yp.to/ecdh.html
-- XChaCha20-Poly1305: https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/
+- ChaCha20-Poly1305 (RFC 8439): https://datatracker.ietf.org/doc/html/rfc8439
+- XChaCha20 draft（未采用，见 SPEC D1）: https://datatracker.ietf.org/doc/draft-irtf-cfrg-xchacha/
 - Argon2: https://github.com/P-H-C/phc-winner-argon2

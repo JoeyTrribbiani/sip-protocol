@@ -125,6 +125,10 @@ class RekeyManager:
             bool: 是否有效
         """
         try:
+            # 0. 版本校验（SPEC §11.2）
+            if rekey_request.get("version") != PROTOCOL_VERSION:
+                return False
+
             # 1. 验证时间戳（±5分钟）
             timestamp = rekey_request["timestamp"]
             current_time = int(time.time() * 1000)
@@ -248,6 +252,10 @@ class RekeyManager:
             bool: 是否有效
         """
         try:
+            # 0. 版本校验（SPEC §11.2）
+            if rekey_response.get("version") != PROTOCOL_VERSION:
+                return False
+
             # 1. 验证时间戳（±5分钟）
             timestamp = rekey_response["timestamp"]
             current_time = int(time.time() * 1000)
