@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 from ..crypto.dh import generate_keypair, dh_exchange
 from ..crypto.argon2 import hash_psk
 from ..crypto.hkdf import derive_keys_triple_dh
+from ..exceptions import VersionNegotiationError
 
 HANDSHAKE_NONCE_LENGTH = 16
 PROTOCOL_VERSION = "SIP-1.0"
@@ -90,6 +91,12 @@ def respond_handshake(
     Returns:
         Tuple[dict, dict, dict]: (handshake_auth, agent_state, session_keys)
     """
+    # 版本校验（SPEC §11.2：不认识的版本在任何密码学计算之前拒绝）
+    if handshake_hello.get("version") != PROTOCOL_VERSION:
+        raise VersionNegotiationError(
+            message=f"不支持的协议版本: {handshake_hello.get('version')}（期望 {PROTOCOL_VERSION}）"
+        )
+
     # 验证时间戳（±5分钟）
     current_time = int(time.time() * 1000)
     hello_time = handshake_hello["timestamp"]
@@ -210,6 +217,12 @@ def complete_handshake(handshake_auth: dict, agent_state: dict):
     Returns:
         Tuple[dict, dict]: (session_keys, session_state)
     """
+    # 版本校验（SPEC §11.2）
+    if handshake_auth.get("version") != PROTOCOL_VERSION:
+        raise VersionNegotiationError(
+            message=f"不支持的协议版本: {handshake_auth.get('version')}（期望 {PROTOCOL_VERSION}）"
+        )
+
     # 验证时间戳（±5分钟）
     current_time = int(time.time() * 1000)
     auth_time = handshake_auth["timestamp"]
