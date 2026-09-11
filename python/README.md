@@ -9,5 +9,5 @@ Agent 间端到端加密通道库：三重 DH 握手 / XChaCha20-Poly1305 / Reke
 ```bash
 uv venv --python 3.11 .venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-pytest tests/          # 207 passed
+pytest tests/          # 239 passed
 ```

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-11
+
+新增：加密文件传输 `filetransfer/`（v1.x `file_transfer/` 评估后按新架构重建，非原样恢复）。
+旧实现为"明文分块落盘 + 引用传输"（依赖已删的 schema/ 与共享文件系统假设，chunk 不加密、
+全量内存、无流式），与纯加密库定位冲突，故不回搬代码；新实现是 transport 之上的应用层模块，
+仅复用现有 crypto 原语，零新增底层依赖。
+
+### 新增
+
+- **`filetransfer/` — 加密文件工件（SIPFT1.0，.sipft）**
+  - `pack_file` / `unpack_file`：自包含加密工件，可走任意通道（dsh tool / git / 网盘），离线解包
+  - 流式分块加密：逐块读-加密-写，峰值内存与文件大小无关（8MB 文件实测峰值 < 文件一半）
+  - HKDF 块独立密钥：header_key 与 chunk_key(file_id, index) 均从 master_key 派生
+  - AEAD tag 链防篡改/重排/拼接/截断：每块 AAD 绑定 MAGIC+file_id+块序+前一帧标签，
+    链首为认证头部的标签；跨工件移植（同密钥）也被 file_id 绑定拒绝；逐块 fail-fast
+  - 认证头部：文件名/MIME/大小等元数据加密且认证；解包端输出路径 basename 清洗（防穿越）
+    + 同名冲突自动 "(2)" 重命名；半成品 tmp 文件失败即清理，成功原子替换
+  - 大小护栏：默认分块 1MB（1KB..16MB）、单文件 5GB、分块数 65536 上限
+- **`crypto/xchacha20_poly1305.py`** — 加解密原语新增可选 `aad` 参数（默认 None，
+  既有调用点行为不变；filetransfer tag 链在用）
+- **`exceptions.py`** — 新增 `ArtifactCorruptedError`（SIP-FILE-003）；
+  `ChunkIntegrityError` 补 `details.chunk_index`（dsh tool 错误响应可见失败块号）
+- **dsh 壳 v0.2** — 新注册公用 agent tool `encrypted_file_pack` / `encrypted_file_unpack`
+  （与 sip_encrypt/sip_decrypt 同款 defineTool + ctx.tools.register 声明模式，
+  一次性 spawn Python，密钥走 stdin；qa-platform profile link 直用）
+- **测试 +32**（207 → 239）：往返（空/单块/对齐/非对齐）、乱序拒判、删块拒判、
+  整帧交换拒判、跨工件拼接拒判、篡改（密文/标签/头部/魔数）拒判、截断/尾部垃圾拒判、
+  错密钥拒判、大文件流式内存上界、路径穿越清洗、冲突重命名、AAD 原语兼容性
+
+### 评估结论（discovery/ 与 schema/ 处置）
+
+- **`file_transfer/` → 恢复（重做）**：大 payload 内存策略 / 块独立密钥 + tag 链整流完整性 /
+  自包含工件对 dsh 生态即插即用，均为消息加密（单条全量内存）覆盖不了的增值
+- **`discovery/` → 不恢复**：AgentCard/Registry 是服务发现语义，与加密正交
+- **`schema/` → 不恢复**：结构化消息信封是应用层框架；filetransfer 自带最小认证 manifest
+
 ### 修复
 
 - **v2.0 瘦身残留清理**：`discovery/`、`file_transfer/`、`schema/` 三个目录在源码树
