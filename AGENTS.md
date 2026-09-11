@@ -8,13 +8,14 @@
 sip-protocol/
 ├── python/                        # 主实现语言（Python 3.11+）
 │   └── src/sip_protocol/
-│       ├── __init__.py            # 包入口，__version__ = 2.0.0
+│       ├── __init__.py            # 包入口，__version__ = 2.1.0
 │       ├── __main__.py            # MCP 入口（python -m sip_protocol）
 │       ├── exceptions.py          # 全局异常体系（分层异常 + 错误注册表）
 │       ├── crypto/                # 加密原语层
 │       ├── protocol/              # 协议层（握手/消息/Rekey）
 │       ├── managers/              # 会话与 nonce 管理
-│       └── transport/             # 加密通道与 MCP Server
+│       ├── transport/             # 加密通道与 MCP Server
+│       └── filetransfer/          # 加密文件工件（应用层，.sipft）
 ├── docs/                          # 文档（architecture + e2ee-protocol + 3 个设计稿）
 ├── CHANGELOG.md                   # 变更日志
 ├── CONTRIBUTING.md                # 贡献指南
@@ -66,9 +67,20 @@ sip-protocol/
 - **依赖：** protocol/, crypto/, managers/
 - **被依赖：** 上层应用
 
+### `filetransfer/` — 加密文件工件（应用层，v2.1 重建）
+| 文件 | 职责 |
+|------|------|
+| `format.py` | SIPFT1.0 工件布局 + 密钥调度（HKDF 头/块独立密钥）+ AAD 构造 |
+| `packer.py` | pack_file：流式分块加密（常量内存，tmp+原子替换） |
+| `unpacker.py` | unpack_file：逐块认证 fail-fast + 路径防穿越 + 冲突重命名 |
+- **依赖：** crypto/（hkdf, xchacha20_poly1305）+ exceptions.py；不依赖 transport/protocol
+- **被依赖：** dsh 壳 encrypted_file_pack / encrypted_file_unpack
+- **背景：** v1.x file_transfer（明文落盘引用式）评估后按 dsh 公制重做，非原样恢复
+
 ## 模块依赖关系
 
 ```
+filetransfer/ ──→ crypto/            （应用层，仅复用原语）
 transport/ ──→ protocol/ ──→ crypto/
     │              │
     │              └──→ managers/
@@ -84,4 +96,4 @@ transport/ ──→ protocol/ ──→ crypto/
 - **Pylint 10.00/10** — max-args=7，用 MessageOptions 绕过
 - **MCP 四工具行为冻结** — sip_handshake/sip_encrypt/sip_decrypt/sip_rekey 不得变更响应结构（黄金基线管控）
 - **MCP 入口** — `python3.11 -m sip_protocol --psk <key> --agent-id <id>`（openclaw.json 通路，改造不可破坏）
-- **v2.0 已移除** — schema/file_transfer/discovery/group/decision/fragment/offline_queue/persistence/resume/version/各平台适配器/javascript（git 历史 ≤ v1.4.0 可回溯）
+- **v2.0 已移除** — schema/discovery/group/decision/fragment/offline_queue/persistence/resume/version/各平台适配器/javascript（git 历史 ≤ v1.4.0 可回溯）；file_transfer 已于 v2.1 以 `filetransfer/` 按新架构重建

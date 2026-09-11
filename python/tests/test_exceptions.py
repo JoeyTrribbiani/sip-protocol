@@ -194,6 +194,7 @@ from sip_protocol.exceptions import (
     MemberNotFoundError,
     GroupKeyError,
     FileTransferError,
+    ArtifactCorruptedError,
     ChunkIntegrityError,
     FileTooLargeError,
 )
@@ -306,6 +307,7 @@ class TestErrorRegistry:
             "SIP-FILE-000",
             "SIP-FILE-001",
             "SIP-FILE-002",
+            "SIP-FILE-003",
         }
         assert set(_ERROR_REGISTRY.keys()) == expected
 
@@ -348,6 +350,7 @@ class TestSubclassFromDictRoundtrip:
             FileTransferError,
             ChunkIntegrityError,
             FileTooLargeError,
+            ArtifactCorruptedError,
         ],
     )
     def test_roundtrip_preserves_all_fields(self, cls):

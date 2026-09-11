@@ -20,6 +20,9 @@ SIP 自 v2.0 起专注加密层：为任意两个 Agent 提供端到端加密通
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
+│               应用层（filetransfer，v2.1）                    │
+│     加密文件工件 pack/unpack（流式 AEAD + tag 链）            │
+├─────────────────────────────────────────────────────────────┤
 │                    传输层（transport）                        │
 │     EncryptedChannel 加密通道 │ AgentMessage │ MCP Server   │
 ├─────────────────────────────────────────────────────────────┤
@@ -83,6 +86,19 @@ SIP 自 v2.0 起专注加密层：为任意两个 Agent 提供端到端加密通
 - **依赖：** protocol/, crypto/, managers/
 - **被依赖：** 上层应用（OpenClaw 经 MCP 接入）
 
+## 应用层（filetransfer/，v2.1）
+
+| 文件 | 职责 |
+|------|------|
+| `format.py` | SIPFT1.0 工件布局 + 密钥调度（HKDF 头/块独立密钥）+ AAD 构造 |
+| `packer.py` | `pack_file` 流式分块加密（常量内存，tmp + 原子替换） |
+| `unpacker.py` | `unpack_file` 逐块认证 fail-fast + 路径防穿越 + 冲突重命名 |
+
+- **依赖：** crypto/（hkdf, xchacha20_poly1305）+ exceptions.py；位于 transport 之上，
+  但无代码耦合（master_key 可复用握手派生的会话密钥）
+- **被依赖：** dsh 壳 `encrypted_file_pack` / `encrypted_file_unpack` 公用 tool
+- **背景：** v1.x `file_transfer/`（明文落盘引用式）评估后按新架构重建，非原样恢复
+
 ---
 
 ## MCP Server 四工具
@@ -118,7 +134,8 @@ OpenClaw 等宿主经 stdio JSON-RPC 调用（`python -m sip_protocol --psk <key
 
 以下应用层模块在 v2.0 瘦身中移除，可在 git 历史（≤ v1.4.0）中回溯：
 
-- `schema/`（S1 结构化消息）、`file_transfer/`（F1 分块传输）
+- `schema/`（S1 结构化消息）
+- `file_transfer/`（F1 分块传输；v2.1 已以 `filetransfer/` 按新架构重建，见上文应用层）
 - `discovery/`（S2+S4 AgentCard/AgentRegistry）
 - `protocol/` 中的 group、group_simple、decision、fragment、offline_queue、persistence、resume、version
 - `transport/` 中的 base、openclaw_adapter、hermes_claude_adapter、websocket_adapter

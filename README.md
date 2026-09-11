@@ -25,6 +25,7 @@
 | PSK 哈希 | Argon2id | `crypto/argon2.py` |
 | 防重放 | Nonce FIFO 淘汰 + 消息计数器 + Replay Tag | `managers/nonce.py` |
 | 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 | `protocol/handshake.py` `protocol/rekey.py` |
+| 加密文件 | SIPFT1.0：流式分块 AEAD + HKDF 块独立密钥 + tag 链防篡改重排 | `filetransfer/` |
 
 ## 安装
 
@@ -95,10 +96,28 @@ enc = encrypt_message(
 assert decrypt_message(keys_b["encryption_key"], enc) == "hello"
 ```
 
+### 加密文件（大 payload 场景）
+
+`EncryptedChannel` 加密的是单条消息（全量内存），文件场景用 `filetransfer/`：
+流式分块、常量内存、每块独立密钥、AEAD tag 链防篡改/重排/拼接/截断。
+工件（`.sipft`）自包含，可走任意通道（dsh / git / 网盘），离线解包。
+
+```python
+import os
+from sip_protocol.filetransfer import pack_file, unpack_file
+
+master_key = os.urandom(32)  # 也可复用握手派生的会话密钥
+
+result = pack_file("report.zip", master_key)          # → report.zip.sipft
+out = unpack_file(result.artifact_path, master_key)   # 校验全链后才落盘
+# 篡改/乱序/截断/错密钥 → ChunkIntegrityError / ArtifactCorruptedError，fail-fast
+```
+
 ## API 参考
 
-> 分层依赖（自上而下单向）：`transport/` → `protocol/` → `crypto/`；`managers/` 提供
-> 会话状态与防重放，被 `protocol/` 与 `transport/` 复用；`exceptions.py` 为全局异常体系。
+> 分层依赖（自上而下单向）：`filetransfer/`（应用层）与 `transport/` → `protocol/` →
+> `crypto/`；`managers/` 提供会话状态与防重放，被 `protocol/` 与 `transport/` 复用；
+> `exceptions.py` 为全局异常体系。
 > 完整架构图见 [docs/architecture.md](./docs/architecture.md)。
 
 | 模块 | 主要入口 | 说明 |
@@ -107,6 +126,7 @@ assert decrypt_message(keys_b["encryption_key"], enc) == "hello"
 | `protocol/` | `initiate_handshake` / `encrypt_message` / `RekeyManager` | 三重 DH、消息加解密、密钥轮换 |
 | `managers/` | `SessionState` / `NonceManager` | 会话状态、防重放 |
 | `transport/` | `EncryptedChannel` / `AgentMessage` / `SipMcpServer` | 加密通道、消息格式、MCP Server |
+| `filetransfer/` | `pack_file` / `unpack_file` | 加密文件工件（应用层，仅依赖 crypto 原语） |
 | `exceptions.py` | `SIPError` 及分层子类 | 全局异常体系 + 错误注册表 |
 
 架构详见 [docs/architecture.md](./docs/architecture.md)，协议权威规范见 [docs/e2ee-protocol.md](./docs/e2ee-protocol.md)。
@@ -132,8 +152,9 @@ python -m sip_protocol --psk <shared-key> --agent-id <agent-id>
 
 本仓库根即一个 dsh 插件（`dsh-sip-protocol`，零部署纯声明式）：
 `package.json` + `cordis.patch.yml` + `lib/index.mjs`。注册 agent 工具
-`sip_encrypt` / `sip_decrypt`（XChaCha20-Poly1305 AEAD 一次性加解密，每次调用
-spawn Python，不守护服务进程）。前置条件：解释器可导入 `sip_protocol`
+`sip_encrypt` / `sip_decrypt`（XChaCha20-Poly1305 AEAD 一次性加解密）与
+`encrypted_file_pack` / `encrypted_file_unpack`（SIPFT1.0 流式加密文件工件），
+每次调用 spawn Python，不守护服务进程。前置条件：解释器可导入 `sip_protocol`
 （默认 `python3.11`，可用 `SIP_PYTHON` 覆盖）。
 
 ```bash
@@ -143,6 +164,7 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路�
 ## 安全注意事项
 
 - **PSK 管理** — PSK 经 Argon2id 哈希后参与三重 DH，用于中间人防护；生产环境 PSK 不得硬编码进代码或入库
+- **加密文件工件** — SIPFT1.0：每块独立 HKDF 密钥 + AEAD tag 链（乱序/拼接/截断/跨工件移植逐块拒判，fail-fast）；文件名等元数据随头部加密且认证；流式常量内存
 - **恒定时间比较** — 认证标签与 replay tag 均使用恒定时间比较，防时序攻击
 - **旧密钥擦除** — Rekey 应用新密钥后旧密钥经 `ctypes.memset` 安全擦除
 - **重放窗口** — Nonce 管理器 FIFO 淘汰 + 时间戳验证，超窗消息拒绝
@@ -153,8 +175,8 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路�
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 207 passed |
-| 覆盖率 | 88% |
+| 测试用例 | 239 passed |
+| 覆盖率 | 89% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |
 | Black | clean |

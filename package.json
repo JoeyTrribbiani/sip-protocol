@@ -1,7 +1,7 @@
 {
   "name": "dsh-sip-protocol",
-  "version": "0.1.0",
-  "description": "SIP encryption library as a dsh plugin — XChaCha20-Poly1305 AEAD encrypt/decrypt agent tools backed by sip_protocol (Python). Zero-deploy: no service process, tools spawn one-shot Python per call.",
+  "version": "0.2.0",
+  "description": "SIP encryption library as a dsh plugin — XChaCha20-Poly1305 AEAD encrypt/decrypt agent tools plus streaming encrypted file pack/unpack (.sipft artifacts), backed by sip_protocol (Python). Zero-deploy: no service process, tools spawn one-shot Python per call.",
   "type": "module",
   "main": "lib/index.mjs",
   "license": "Apache-2.0",

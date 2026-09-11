@@ -15,7 +15,9 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 NONCE_LENGTH = 12  # ChaCha20-Poly1305使用12字节nonce（Python cryptography库限制）
 
 
-def encrypt_xchacha20_poly1305(key: bytes, plaintext: bytes, nonce: bytes) -> tuple[bytes, bytes]:
+def encrypt_xchacha20_poly1305(
+    key: bytes, plaintext: bytes, nonce: bytes, aad: bytes | None = None
+) -> tuple[bytes, bytes]:
     """
     ChaCha20-Poly1305加密（Python回退实现）
 
@@ -23,12 +25,13 @@ def encrypt_xchacha20_poly1305(key: bytes, plaintext: bytes, nonce: bytes) -> tu
         key: 加密密钥（32字节）
         plaintext: 明文
         nonce: 初始化向量（12字节）
+        aad: 附加认证数据（可选，认证但不加密——filetransfer tag 链在用）
 
     Returns:
         Tuple[bytes, bytes]: (密文, 认证标签)
     """
     cipher = ChaCha20Poly1305(key)
-    ciphertext = cipher.encrypt(nonce, plaintext, None)
+    ciphertext = cipher.encrypt(nonce, plaintext, aad)
     # ChaCha20-Poly1305: 最后16字节是认证标签
     ciphertext_only = ciphertext[: len(plaintext)]
     auth_tag = ciphertext[len(plaintext) :]
@@ -36,7 +39,7 @@ def encrypt_xchacha20_poly1305(key: bytes, plaintext: bytes, nonce: bytes) -> tu
 
 
 def decrypt_xchacha20_poly1305(
-    key: bytes, ciphertext: bytes, nonce: bytes, auth_tag: bytes
+    key: bytes, ciphertext: bytes, nonce: bytes, auth_tag: bytes, aad: bytes | None = None
 ) -> bytes:
     """
     ChaCha20-Poly1305解密（Python回退实现）
@@ -46,6 +49,7 @@ def decrypt_xchacha20_poly1305(
         ciphertext: 密文
         nonce: 初始化向量（12字节）
         auth_tag: 认证标签（16字节）
+        aad: 附加认证数据（可选，须与加密时一致，否则认证失败）
 
     Returns:
         bytes: 明文
@@ -53,7 +57,7 @@ def decrypt_xchacha20_poly1305(
     cipher = ChaCha20Poly1305(key)
     # 重组密文和认证标签
     ciphertext_with_tag = ciphertext + auth_tag
-    plaintext = cipher.decrypt(nonce, ciphertext_with_tag, None)
+    plaintext = cipher.decrypt(nonce, ciphertext_with_tag, aad)
     return plaintext
 
 
