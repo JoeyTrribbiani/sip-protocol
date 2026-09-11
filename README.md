@@ -119,6 +119,18 @@ python -m sip_protocol --psk <shared-key> --agent-id <agent-id>
 
 注意：握手 `complete` 依赖同进程的 `initiator` 状态，宿主应使用长驻进程逐条收发请求。
 
+## dsh 接入
+
+本仓库根即一个 dsh 插件（`dsh-sip-protocol`，零部署纯声明式）：
+`package.json` + `cordis.patch.yml` + `lib/index.mjs`。注册 agent 工具
+`sip_encrypt` / `sip_decrypt`（XChaCha20-Poly1305 AEAD 一次性加解密，每次调用
+spawn Python，不守护服务进程）。前置条件：解释器可导入 `sip_protocol`
+（默认 `python3.11`，可用 `SIP_PYTHON` 覆盖）。
+
+```bash
+npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路径>
+```
+
 ## 安全注意事项
 
 - **PSK 管理** — PSK 经 Argon2id 哈希后参与三重 DH，用于中间人防护；生产环境 PSK 不得硬编码进代码或入库
