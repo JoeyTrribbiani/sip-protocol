@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+- **CI Security Audit（run#83）** — runner 预装 setuptools 79.0.1 触发
+  pip-audit `PYSEC-2026-3447`（修复版 83.0.0）审计失败；setuptools 为 runner
+  环境自带、非项目依赖（requirements 未引入），与既有 CVE-2026-3219 忽略
+  同理（先例 f2a9092），追加 `--ignore-vuln PYSEC-2026-3447`
+
 ## [2.1.0] - 2026-09-11
 
 新增：加密文件传输 `filetransfer/`（v1.x `file_transfer/` 评估后按新架构重建，非原样恢复）。
