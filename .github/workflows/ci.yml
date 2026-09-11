@@ -71,7 +71,8 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
 
-    # L5 安全审计（pip 由 runner 管理，CVE-2026-3219 为 pip 自身误报）
+    # L5 安全审计（runner 管理的包不阻塞 CI：CVE-2026-3219 为 pip 自身误报；
+    # PYSEC-2026-3447 为 runner 预装 setuptools 79.0.1 < 修复版 83.0.0，非项目依赖）
     - name: Install Python dependencies
       working-directory: ./python
       run: |
@@ -81,4 +82,4 @@ jobs:
 
     - name: Python audit
       working-directory: ./python
-      run: pip-audit --ignore-vuln CVE-2026-3219
+      run: pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2026-3447
