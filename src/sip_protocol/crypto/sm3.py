@@ -21,22 +21,24 @@ class SM3Hash:
     name = "sm3"
 
     def __init__(self, data: bytes = b"") -> None:
-        self._hash = hashes.Hash(hashes.SM3())
-        self._hash.update(data)
+        # hash_state 为公开命名：copy() 需在同类的另一实例上重建状态，
+        # 下划线命名会触发 pylint protected-access（同类重建属合法操作）
+        self.hash_state = hashes.Hash(hashes.SM3())
+        self.hash_state.update(data)
 
     def update(self, data: bytes) -> "SM3Hash":
-        self._hash.update(data)
+        self.hash_state.update(data)
         return self
 
     def digest(self) -> bytes:
-        return self._hash.copy().finalize()
+        return self.hash_state.copy().finalize()
 
     def hexdigest(self) -> str:
         return self.digest().hex()
 
     def copy(self) -> "SM3Hash":
         clone = SM3Hash.__new__(SM3Hash)
-        clone._hash = self._hash.copy()
+        clone.hash_state = self.hash_state.copy()
         return clone
 
 
@@ -49,4 +51,5 @@ def sm3_hash(data: bytes) -> bytes:
 
 def hmac_sm3(key: bytes, msg: bytes) -> bytes:
     """HMAC-SM3（RFC 2104 构造）"""
-    return hmac_module.new(key, msg, SM3Hash).digest()
+    # 适配器满足 hmac 运行时协议（update/digest/copy/block_size）
+    return hmac_module.new(key, msg, SM3Hash).digest()  # type: ignore[arg-type]

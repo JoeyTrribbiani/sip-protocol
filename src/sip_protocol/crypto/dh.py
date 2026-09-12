@@ -9,6 +9,7 @@
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
 
+from ..exceptions import SuiteNegotiationError
 from .sm2 import SM2PrivateKey, SM2PublicKey
 from .suite import PUBLIC_KEY_LENGTH, SUITE_EN, SUITE_ZH, validate_suite
 
@@ -25,10 +26,10 @@ def generate_keypair(suite: str = SUITE_EN):
     """
     validate_suite(suite)
     if suite == SUITE_ZH:
-        private_key = SM2PrivateKey.generate()
-        return private_key, private_key.public_key()
-    private_key = x25519.X25519PrivateKey.generate()
-    return private_key, private_key.public_key()
+        sm2_private = SM2PrivateKey.generate()
+        return sm2_private, sm2_private.public_key()
+    x25519_private = x25519.X25519PrivateKey.generate()
+    return x25519_private, x25519_private.public_key()
 
 
 def dh_exchange(private_key, public_key):
@@ -54,9 +55,10 @@ def serialize_public_key(public_key) -> bytes:
     """
     if isinstance(public_key, SM2PublicKey):
         return public_key.public_bytes()
-    return public_key.public_bytes(
+    raw = public_key.public_bytes(
         encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
     )
+    return bytes(raw)
 
 
 def serialize_private_key(private_key) -> bytes:
@@ -67,11 +69,12 @@ def serialize_private_key(private_key) -> bytes:
     """
     if isinstance(private_key, SM2PrivateKey):
         return private_key.private_bytes()
-    return private_key.private_bytes(
+    raw = private_key.private_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PrivateFormat.Raw,
         encryption_algorithm=serialization.NoEncryption(),
     )
+    return bytes(raw)
 
 
 def parse_public_key(raw: bytes, suite: str = SUITE_EN):
@@ -87,10 +90,11 @@ def parse_public_key(raw: bytes, suite: str = SUITE_EN):
     """
     validate_suite(suite)
     if len(raw) != PUBLIC_KEY_LENGTH[suite]:
-        raise ValueError(
-            f"公钥长度与套件 {suite} 不符: {len(raw)} 字节"
-            f"（期望 {PUBLIC_KEY_LENGTH[suite]} 字节；跨套件/被剥离 suite 字段的"
-            "握手会在此暴露）"
+        # 长度不符：跨套件握手（如 suite 字段被剥离的降级攻击）或畸形输入，
+        # 两者在此不可区分，统一按协商失败给出明确错误（SPEC §4.5）
+        raise SuiteNegotiationError(
+            message=f"公钥长度与套件 {suite} 不符: {len(raw)} 字节"
+            f"（期望 {PUBLIC_KEY_LENGTH[suite]} 字节；可能是跨套件握手或畸形消息）"
         )
     if suite == SUITE_ZH:
         return SM2PublicKey.from_public_bytes(raw)

@@ -96,9 +96,11 @@ class SM2PublicKey:
     def public_bytes(self) -> bytes:
         """序列化为 65 字节非压缩格式"""
         x_coord, y_coord = self.point
-        return b"\x04" + x_coord.to_bytes(
-            _COORDINATE_LENGTH, "big"
-        ) + y_coord.to_bytes(_COORDINATE_LENGTH, "big")
+        return (
+            b"\x04"
+            + x_coord.to_bytes(_COORDINATE_LENGTH, "big")
+            + y_coord.to_bytes(_COORDINATE_LENGTH, "big")
+        )
 
 
 class SM2PrivateKey:
@@ -130,7 +132,10 @@ class SM2PrivateKey:
 
     def public_key(self) -> SM2PublicKey:
         """派生公钥 P = [d]G"""
-        return SM2PublicKey(_scalar_mult(self._scalar, _G))
+        point = _scalar_mult(self._scalar, _G)
+        if point is None:
+            raise ValueError("SM2 公钥派生得到无穷远点（私钥标量非法）")
+        return SM2PublicKey(point)
 
     def exchange(self, peer_public_key: SM2PublicKey) -> bytes:
         """原始 ECDH：共享秘密 = [d]P_peer 的 x 坐标（32 字节大端）"""

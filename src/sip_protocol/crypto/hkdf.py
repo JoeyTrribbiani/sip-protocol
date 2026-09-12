@@ -46,9 +46,7 @@ def hkdf(ikm: bytes, salt: bytes, info: bytes, length: int, suite: str = SUITE_E
     return kdf.derive(ikm)
 
 
-def derive_keys_triple_dh(
-    shared_1, shared_2, shared_3, psk_hash, nonce_a, nonce_b, suite=SUITE_EN
-):
+def derive_keys_triple_dh(shared_1, shared_2, shared_3, psk_hash, nonce_a, nonce_b, suite=SUITE_EN):
     """
     派生三个独立密钥（用于握手，三重DH）
 

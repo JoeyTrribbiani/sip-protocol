@@ -13,6 +13,7 @@ from typing import BinaryIO
 
 from cryptography.exceptions import InvalidTag
 
+from sip_protocol.crypto.suite import SUITE_EN, validate_suite
 from sip_protocol.crypto.xchacha20_poly1305 import NONCE_LENGTH, decrypt_xchacha20_poly1305
 from sip_protocol.exceptions import ArtifactCorruptedError, ChunkIntegrityError
 from sip_protocol.filetransfer.format import (
@@ -54,6 +55,7 @@ def unpack_file(
     artifact_path: str,
     master_key: bytes,
     output_path: str | None = None,
+    suite: str = SUITE_EN,
 ) -> UnpackResult:
     """校验并解密自包含工件，写出原文件
 
@@ -62,6 +64,8 @@ def unpack_file(
         master_key: 打包时使用的 32 字节主密钥
         output_path: 输出文件或目录路径（默认：工件同目录 + 头部文件名；
                      同名冲突时自动追加 " (2)"、"(3)"…；路径穿越被清洗）
+        suite: 打包时使用的密码套件（EN 默认；ZH 为带外信息，须与打包方约定——
+               套件不符表现为头部认证失败，与密钥错误不可区分）
 
     Returns:
         UnpackResult: 解包结果元数据
@@ -71,18 +75,19 @@ def unpack_file(
         ArtifactCorruptedError: 魔数/头部/长度非法，或头部认证失败（密钥错误同此表现）
         ChunkIntegrityError: 任一块认证失败（篡改/乱序/跨工件拼接）
     """
+    validate_suite(suite)
     if not os.path.isfile(artifact_path):
         raise FileNotFoundError(f"工件不存在: {artifact_path}")
 
     tmp_path = ""
     try:
         with open(artifact_path, "rb") as src:
-            header, prev_tag = _read_header(src, master_key)
+            header, prev_tag = _read_header(src, master_key, suite)
             target = _resolve_output_path(artifact_path, output_path, header.file_name)
             os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
             tmp_path = target + _TMP_SUFFIX
             with open(tmp_path, "wb") as dst:
-                verified = _verify_chunks(src, dst, master_key, header, prev_tag)
+                verified = _verify_chunks(src, dst, master_key, header, prev_tag, suite)
                 _ensure_eof(src)
         os.replace(tmp_path, target)
     except Exception:
@@ -99,7 +104,9 @@ def unpack_file(
     )
 
 
-def _read_header(src: BinaryIO, master_key: bytes) -> tuple[ArtifactHeader, bytes]:
+def _read_header(
+    src: BinaryIO, master_key: bytes, suite: str = SUITE_EN
+) -> tuple[ArtifactHeader, bytes]:
     """读取并认证头部，返回 (头部, header_tag —— tag 链首)"""
     header_length = read_prefix(src)
     header_nonce = read_exact(src, NONCE_LENGTH, "header_nonce")
@@ -107,7 +114,12 @@ def _read_header(src: BinaryIO, master_key: bytes) -> tuple[ArtifactHeader, byte
     header_tag = read_exact(src, TAG_LENGTH, "header_tag")
     try:
         header_plain = decrypt_xchacha20_poly1305(
-            derive_header_key(master_key), header_ct, header_nonce, header_tag, header_aad()
+            derive_header_key(master_key, suite),
+            header_ct,
+            header_nonce,
+            header_tag,
+            header_aad(),
+            suite,
         )
     except InvalidTag as error:
         raise ArtifactCorruptedError(message="头部认证失败：密钥错误或工件被篡改") from error
@@ -120,6 +132,7 @@ def _verify_chunks(
     master_key: bytes,
     header: ArtifactHeader,
     prev_tag: bytes,
+    suite: str = SUITE_EN,
 ) -> int:
     """逐帧解密认证并写出，返回校验通过的块数"""
     verified = 0
@@ -129,11 +142,12 @@ def _verify_chunks(
         nonce, ciphertext, tag = read_frame(src, expected_len)
         try:
             plaintext = decrypt_xchacha20_poly1305(
-                derive_chunk_key(master_key, header.file_id_bytes, index),
+                derive_chunk_key(master_key, header.file_id_bytes, index, suite),
                 ciphertext,
                 nonce,
                 tag,
                 chunk_aad(header.file_id_bytes, index, prev_tag),
+                suite,
             )
         except InvalidTag as error:
             raise ChunkIntegrityError(chunk_index=index) from error

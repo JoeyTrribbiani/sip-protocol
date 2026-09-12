@@ -290,6 +290,7 @@ class TestErrorRegistry:
             "SIP-PROTO-002",
             "SIP-PROTO-003",
             "SIP-PROTO-004",
+            "SIP-PROTO-005",
             "SIP-MSG-000",
             "SIP-MSG-001",
             "SIP-MSG-002",

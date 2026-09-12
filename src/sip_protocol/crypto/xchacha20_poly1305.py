@@ -20,11 +20,16 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from .sm4_gcm import decrypt_sm4_gcm, encrypt_sm4_gcm
 from .suite import SUITE_EN, SUITE_ZH, validate_suite
 
-NONCE_LENGTH = 12  # ChaCha20-Poly1305使用12字节nonce（Python cryptography库限制）；SM4-GCM 同为 12 字节
+NONCE_LENGTH = (
+    12  # ChaCha20-Poly1305使用12字节nonce（Python cryptography库限制）；SM4-GCM 同为 12 字节
+)
 
 
 def encrypt_xchacha20_poly1305(
-    key: bytes, plaintext: bytes, nonce: bytes, aad: bytes | None = None,
+    key: bytes,
+    plaintext: bytes,
+    nonce: bytes,
+    aad: bytes | None = None,
     suite: str = SUITE_EN,
 ) -> tuple[bytes, bytes]:
     """
@@ -52,7 +57,11 @@ def encrypt_xchacha20_poly1305(
 
 
 def decrypt_xchacha20_poly1305(
-    key: bytes, ciphertext: bytes, nonce: bytes, auth_tag: bytes, aad: bytes | None = None,
+    key: bytes,
+    ciphertext: bytes,
+    nonce: bytes,
+    auth_tag: bytes,
+    aad: bytes | None = None,
     suite: str = SUITE_EN,
 ) -> bytes:
     """

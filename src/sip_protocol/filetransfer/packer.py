@@ -12,6 +12,7 @@ import mimetypes
 import os
 from dataclasses import dataclass
 
+from sip_protocol.crypto.suite import SUITE_EN, validate_suite
 from sip_protocol.crypto.xchacha20_poly1305 import (
     encrypt_xchacha20_poly1305,
     generate_nonce,
@@ -67,6 +68,7 @@ def pack_file(
     master_key: bytes,
     output_path: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
+    suite: str = SUITE_EN,
 ) -> PackResult:
     """把文件流式加密打包为自包含工件
 
@@ -79,6 +81,8 @@ def pack_file(
         master_key: 32 字节主密钥（HKDF 输入，建议与通道会话密钥同级保密）
         output_path: 工件输出路径（默认源文件名 + .sipft）
         chunk_size: 分块大小（默认 1MB，1KB..16MB）
+        suite: 密码套件（EN → ChaCha20+HKDF-SHA256；ZH → SM4-GCM+HKDF-SM3，
+            套件为带外信息，解包方须以同一套件调用）
 
     Returns:
         PackResult: 打包结果元数据
@@ -88,6 +92,7 @@ def pack_file(
         FileTooLargeError: 文件超过 MAX_FILE_SIZE（5GB）
         FileTransferError: 源文件在打包期间被改动或 I/O 失败
     """
+    validate_suite(suite)
     validate_chunk_size(chunk_size)
     if not os.path.isfile(input_path):
         raise FileNotFoundError(f"源文件不存在: {input_path}")
@@ -113,7 +118,7 @@ def pack_file(
     artifact_path = output_path or (input_path + ARTIFACT_SUFFIX)
     tmp_path = artifact_path + _TMP_SUFFIX
 
-    written_chunks = _write_artifact(tmp_path, input_path, master_key, header)
+    written_chunks = _write_artifact(tmp_path, input_path, master_key, header, suite)
     if written_chunks != total_chunks:
         os.unlink(tmp_path)
         raise FileTransferError(
@@ -133,13 +138,17 @@ def pack_file(
 
 
 def _write_artifact(
-    tmp_path: str, input_path: str, master_key: bytes, header: ArtifactHeader
+    tmp_path: str,
+    input_path: str,
+    master_key: bytes,
+    header: ArtifactHeader,
+    suite: str = SUITE_EN,
 ) -> int:
     """写工件主体：认证头部 + 全部块帧，返回实际写入块数"""
-    header_key = derive_header_key(master_key)
+    header_key = derive_header_key(master_key, suite)
     header_nonce = generate_nonce()
     header_ct, header_tag = encrypt_xchacha20_poly1305(
-        header_key, header.to_json_bytes(), header_nonce, header_aad()
+        header_key, header.to_json_bytes(), header_nonce, header_aad(), suite
     )
 
     written = 0
@@ -153,10 +162,14 @@ def _write_artifact(
                 plaintext = src.read(header.chunk_size)
                 if not plaintext:
                     break
-                chunk_key = derive_chunk_key(master_key, header.file_id_bytes, written)
+                chunk_key = derive_chunk_key(master_key, header.file_id_bytes, written, suite)
                 nonce = generate_nonce()
                 ciphertext, tag = encrypt_xchacha20_poly1305(
-                    chunk_key, plaintext, nonce, chunk_aad(header.file_id_bytes, written, prev_tag)
+                    chunk_key,
+                    plaintext,
+                    nonce,
+                    chunk_aad(header.file_id_bytes, written, prev_tag),
+                    suite,
                 )
                 write_frame(dst, nonce, ciphertext, tag)
                 # tag 链推进：下一块的 AAD 绑定本块标签

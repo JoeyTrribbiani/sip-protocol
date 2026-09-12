@@ -1,18 +1,24 @@
 """
 Rekey密钥轮换模块
 实现密钥轮换流程（前向保密）
+
+v1.1 起套件感知（SPEC v1.1 §7）：session_state 携带 suite（缺省 EN 向后兼容），
+临时密钥/签名摘要/新钥派生按套件分派（ZH → SM2 / HMAC-SM3 / HKDF-SM3）。
 """
 
 import ctypes
 import os
 import time
 import hmac
-import hashlib
 import base64
-from cryptography.hazmat.primitives.asymmetric import x25519
-from cryptography.hazmat.primitives import serialization
-from ..crypto.dh import generate_keypair, dh_exchange
+from ..crypto.dh import (
+    dh_exchange,
+    generate_keypair,
+    parse_public_key,
+    serialize_public_key,
+)
 from ..crypto.hkdf import hkdf
+from ..crypto.suite import SUITE_EN, digestmod, validate_suite
 
 
 def _secure_wipe(data: bytearray) -> None:
@@ -48,12 +54,14 @@ class RekeyManager:
         构造函数
 
         Args:
-            session_state: 当前会话状态（包含encryption_key, auth_key, replay_key）
+            session_state: 当前会话状态（包含encryption_key, auth_key, replay_key；
+                可选 suite，缺省 EN 向后兼容）
             is_initiator: 是否为发起方（影响nonce排列顺序）
         """
         self.session_state = session_state
         self.rekey_sequence = 0
         self.is_initiator = is_initiator
+        self.suite = validate_suite(session_state.get("suite", SUITE_EN))
 
     def create_rekey_request(self, reason: str = "scheduled", key_lifetime: int = 3600) -> dict:
         """
@@ -66,16 +74,14 @@ class RekeyManager:
         Returns:
             dict: Rekey请求消息
         """
-        # 1. 生成新临时密钥对
-        new_ephemeral_private_key, new_ephemeral_public_key = generate_keypair()
+        # 1. 生成新临时密钥对（按会话套件）
+        new_ephemeral_private_key, new_ephemeral_public_key = generate_keypair(self.suite)
 
         # 2. 生成nonce
         nonce = os.urandom(REKEY_NONCE_LENGTH)
 
         # 3. 序列化公钥
-        new_ephemeral_pub_bytes = new_ephemeral_public_key.public_bytes(
-            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
-        )
+        new_ephemeral_pub_bytes = serialize_public_key(new_ephemeral_public_key)
 
         # 4. 构建请求数据
         request_data = {
@@ -85,14 +91,14 @@ class RekeyManager:
             "key_lifetime": key_lifetime,
         }
 
-        # 5. 使用当前auth_key签名
+        # 5. 使用当前auth_key签名（EN → HMAC-SHA256；ZH → HMAC-SM3）
         signature_data = (
             f"{REKEY_NONCE_LENGTH}:{request_data['ephemeral_pub']}:"
             f"{request_data['nonce']}:"
             f"{reason}:{key_lifetime}"
         ).encode()
         signature = hmac.new(
-            self.session_state["auth_key"], signature_data, hashlib.sha256
+            self.session_state["auth_key"], signature_data, digestmod(self.suite)
         ).digest()
         signature_b64 = base64.b64encode(signature).decode()
 
@@ -147,7 +153,7 @@ class RekeyManager:
             ).encode()
 
             expected_signature = hmac.new(
-                self.session_state["auth_key"], signature_data, hashlib.sha256
+                self.session_state["auth_key"], signature_data, digestmod(self.suite)
             ).digest()
 
             if not hmac.compare_digest(signature, expected_signature):
@@ -179,22 +185,18 @@ class RekeyManager:
         # 更新rekey_sequence
         self.rekey_sequence = rekey_request["sequence"]
 
-        # 2. 生成新临时密钥对
-        new_ephemeral_private_key, new_ephemeral_public_key = generate_keypair()
+        # 2. 生成新临时密钥对（按会话套件）
+        new_ephemeral_private_key, new_ephemeral_public_key = generate_keypair(self.suite)
 
         # 3. 生成nonce
         nonce = os.urandom(REKEY_NONCE_LENGTH)
 
         # 4. 序列化公钥
-        new_ephemeral_pub_bytes = new_ephemeral_public_key.public_bytes(
-            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
-        )
+        new_ephemeral_pub_bytes = serialize_public_key(new_ephemeral_public_key)
 
         # 5. 解析对方的临时公钥
         peer_ephemeral_pub_bytes = base64.b64decode(rekey_request["request"]["ephemeral_pub"])
-        peer_ephemeral_public_key = x25519.X25519PublicKey.from_public_bytes(
-            peer_ephemeral_pub_bytes
-        )
+        peer_ephemeral_public_key = parse_public_key(peer_ephemeral_pub_bytes, self.suite)
 
         # 6. 执行DH密钥交换
         shared_secret = dh_exchange(new_ephemeral_private_key, peer_ephemeral_public_key)
@@ -214,12 +216,12 @@ class RekeyManager:
             "nonce": base64.b64encode(nonce).decode(),
         }
 
-        # 9. 使用当前auth_key签名
+        # 9. 使用当前auth_key签名（EN → HMAC-SHA256；ZH → HMAC-SM3）
         signature_data = (
             f"{REKEY_NONCE_LENGTH}:{response_data['ephemeral_pub']}:" f"{response_data['nonce']}"
         ).encode()
         signature = hmac.new(
-            self.session_state["auth_key"], signature_data, hashlib.sha256
+            self.session_state["auth_key"], signature_data, digestmod(self.suite)
         ).digest()
         signature_b64 = base64.b64encode(signature).decode()
 
@@ -262,7 +264,7 @@ class RekeyManager:
             if abs(current_time - timestamp) > 300000:  # 5分钟
                 return False
 
-            # 2. 验证签名
+            # 2. 验证签名（EN → HMAC-SHA256；ZH → HMAC-SM3）
             signature = base64.b64decode(rekey_response["signature"])
             response_data = rekey_response["response"]
 
@@ -272,7 +274,7 @@ class RekeyManager:
             ).encode()
 
             expected_signature = hmac.new(
-                self.session_state["auth_key"], signature_data, hashlib.sha256
+                self.session_state["auth_key"], signature_data, digestmod(self.suite)
             ).digest()
 
             if not hmac.compare_digest(signature, expected_signature):
@@ -303,9 +305,7 @@ class RekeyManager:
 
         # 2. 解析对方的临时公钥
         peer_ephemeral_pub_bytes = base64.b64decode(rekey_response["response"]["ephemeral_pub"])
-        peer_ephemeral_public_key = x25519.X25519PublicKey.from_public_bytes(
-            peer_ephemeral_pub_bytes
-        )
+        peer_ephemeral_public_key = parse_public_key(peer_ephemeral_pub_bytes, self.suite)
 
         # 3. 执行DH密钥交换
         shared_secret = dh_exchange(self._temp_new_ephemeral_private_key, peer_ephemeral_public_key)
@@ -352,7 +352,7 @@ class RekeyManager:
         self, shared_secret: bytes, initiator_nonce: bytes, responder_nonce: bytes
     ) -> dict:
         """
-        派生新密钥
+        派生新密钥（按会话套件：EN 3×32；ZH 16+32+32，SPEC §5）
 
         Args:
             shared_secret: DH共享密钥
@@ -375,14 +375,19 @@ class RekeyManager:
         # 使用HKDF派生新密钥
         salt = b"SIPRekey"
         info = b"SIP-rekey"
-        output_length = 96  # 32 + 32 + 32
+        output_length = 80 if self.suite != SUITE_EN else 96
 
-        derived_keys = hkdf(combined, salt, info, output_length)
+        derived_keys = hkdf(combined, salt, info, output_length, self.suite)
 
-        # 分割密钥
-        encryption_key = derived_keys[0:32]
-        auth_key = derived_keys[32:64]
-        replay_key = derived_keys[64:96]
+        # 分割密钥（ZH：SM4-128 加密密钥 + 两把 HMAC-SM3 密钥；EN：3×32）
+        if self.suite != SUITE_EN:
+            encryption_key = derived_keys[0:16]
+            auth_key = derived_keys[16:48]
+            replay_key = derived_keys[48:80]
+        else:
+            encryption_key = derived_keys[0:32]
+            auth_key = derived_keys[32:64]
+            replay_key = derived_keys[64:96]
 
         return {
             "encryption_key": encryption_key,

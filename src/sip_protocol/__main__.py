@@ -1,7 +1,7 @@
 """
 SIP MCP Server入口
 
-用法: python -m sip_protocol --psk <密钥> [--agent-id <ID>]
+用法: python -m sip_protocol --psk <密钥> [--agent-id <ID>] [--suite EN|ZH]
 """
 
 from sip_protocol.transport.sip_mcp_server import main

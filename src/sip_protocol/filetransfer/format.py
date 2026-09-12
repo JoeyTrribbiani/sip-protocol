@@ -10,10 +10,12 @@
     24+L   header_tag（16 字节）
     之后   每块一帧：chunk_nonce(12) | chunk_ct(期望长度) | chunk_tag(16)
 
-密钥调度（HKDF-SHA256，复用 crypto 原语）::
+密钥调度（HKDF：EN → HKDF-SHA256，ZH → HKDF-SM3，v1.1 §9.3；复用 crypto 原语）::
 
     header_key = HKDF(master, salt=b"SIP-FileTransfer", info=b"header")
     chunk_key_i = HKDF(master, salt=file_id(16字节), info=b"chunk:{i}")
+    密钥长度：EN 32 字节（ChaCha20）；ZH 16 字节（SM4-128）。
+    套件为带外信息（同 master_key 一并由调用方约定），工件内不携带。
 
 完整性链（AEAD tag 链，防篡改/重排/拼接/截断）::
 
@@ -34,6 +36,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sip_protocol.crypto.hkdf import hkdf
+from sip_protocol.crypto.suite import SUITE_EN, SUITE_ZH, validate_suite
 from sip_protocol.crypto.xchacha20_poly1305 import NONCE_LENGTH
 from sip_protocol.exceptions import ArtifactCorruptedError
 
@@ -57,6 +60,12 @@ MAX_CHUNK_SIZE = 16 * 1024 * 1024
 MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024
 
 _KDF_SALT = b"SIP-FileTransfer"
+
+
+def _aead_key_length(suite: str) -> int:
+    """AEAD 密钥长度：EN 32（ChaCha20）；ZH 16（SM4-128）"""
+    return 16 if suite == SUITE_ZH else 32
+
 
 # magic(8) + header_len(4)
 _PREFIX_LENGTH = MAGIC_LENGTH + 4
@@ -167,14 +176,16 @@ def new_file_id() -> bytes:
     return os.urandom(FILE_ID_LENGTH)
 
 
-def derive_header_key(master_key: bytes) -> bytes:
-    """派生头部加密密钥"""
-    return hkdf(master_key, _KDF_SALT, b"header", 32)
+def derive_header_key(master_key: bytes, suite: str = SUITE_EN) -> bytes:
+    """派生头部加密密钥（EN 32 字节；ZH 16 字节 SM4-128，SPEC v1.1 §9.3）"""
+    validate_suite(suite)
+    return hkdf(master_key, _KDF_SALT, b"header", _aead_key_length(suite), suite)
 
 
-def derive_chunk_key(master_key: bytes, file_id: bytes, index: int) -> bytes:
-    """派生第 index 块的独立加密密钥"""
-    return hkdf(master_key, file_id, b"chunk:%d" % index, 32)
+def derive_chunk_key(master_key: bytes, file_id: bytes, index: int, suite: str = SUITE_EN) -> bytes:
+    """派生第 index 块的独立加密密钥（长度随套件，见 derive_header_key）"""
+    validate_suite(suite)
+    return hkdf(master_key, file_id, b"chunk:%d" % index, _aead_key_length(suite), suite)
 
 
 def header_aad() -> bytes:
