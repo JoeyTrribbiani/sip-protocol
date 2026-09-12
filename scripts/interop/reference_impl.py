@@ -118,7 +118,11 @@ def aead_seal(
 
 
 def aead_open(
-    key: bytes, nonce: bytes, ciphertext: bytes, tag: bytes, aad: bytes | None,
+    key: bytes,
+    nonce: bytes,
+    ciphertext: bytes,
+    tag: bytes,
+    aad: bytes | None,
     suite: str = SUITE_EN,
 ) -> bytes:
     """AEAD 解密；认证失败抛 InvalidTag"""
@@ -179,9 +183,7 @@ def hkdf_sm3(ikm: bytes, salt: bytes, info: bytes, length: int) -> bytes:
     return okm[:length]
 
 
-def hkdf_for_suite(
-    ikm: bytes, salt: bytes, info: bytes, length: int, suite: str
-) -> bytes:
+def hkdf_for_suite(ikm: bytes, salt: bytes, info: bytes, length: int, suite: str) -> bytes:
     """HKDF 分派（EN → SHA256；ZH → SM3）"""
     if suite == SUITE_ZH:
         return hkdf_sm3(ikm, salt, info, length)
@@ -248,9 +250,7 @@ def _jac_to_affine(point: tuple[int, int, int] | None) -> tuple[int, int] | None
     return x * z_inv * z_inv % SM2_P, y * pow(z_inv, 3, SM2_P) % SM2_P
 
 
-def _sm2_scalar_mult(
-    k: int, affine: tuple[int, int]
-) -> tuple[int, int] | None:
+def _sm2_scalar_mult(k: int, affine: tuple[int, int]) -> tuple[int, int] | None:
     """MSB 优先 double-and-add（与主库 LSB 优先构成独立实现路径）"""
     result: tuple[int, int, int] | None = None
     addend: tuple[int, int, int] | None = (affine[0], affine[1], 1)
@@ -336,7 +336,12 @@ class ReferenceSIP:
 
     @staticmethod
     def derive_session_keys(
-        k1: bytes, k2: bytes, k3: bytes, psk: bytes, nonce_i: bytes, nonce_r: bytes,
+        k1: bytes,
+        k2: bytes,
+        k3: bytes,
+        psk: bytes,
+        nonce_i: bytes,
+        nonce_r: bytes,
         suite: str = SUITE_EN,
     ) -> dict[str, bytes]:
         """IKM = K1‖K2‖K3‖psk_hash‖N_i‖N_r（initiator 视角序）→ 三元组
@@ -395,9 +400,7 @@ class ReferenceSIP:
         def pub_of(priv: bytes) -> bytes:
             return sm2_pub_of(priv) if suite == SUITE_ZH else _pub_of(priv)
 
-        id_priv, id_pub = (
-            gen() if identity_priv is None else (identity_priv, pub_of(identity_priv))
-        )
+        id_priv, id_pub = gen() if identity_priv is None else (identity_priv, pub_of(identity_priv))
         eph_priv, eph_pub = (
             gen() if ephemeral_priv is None else (ephemeral_priv, pub_of(ephemeral_priv))
         )
@@ -423,15 +426,16 @@ class ReferenceSIP:
         return hello, state
 
     @staticmethod
-    def initiator_finish(
-        auth: dict, state: dict, check_timestamp: bool = True
-    ) -> dict[str, bytes]:
+    def initiator_finish(auth: dict, state: dict, check_timestamp: bool = True) -> dict[str, bytes]:
         """处理 Auth：版本→套件→时间戳→三重 DH→HMAC 验证（SPEC §4.5）→ 会话密钥"""
         suite = validate_suite(state.get("suite", SUITE_EN))
         if auth.get("version") != PROTOCOL_VERSION:
             raise ValueError(f"不支持的协议版本: {auth.get('version')}")
         negotiate_suite(auth.get("suite", SUITE_EN), suite)
-        if check_timestamp and abs(int(time.time() * 1000) - auth["timestamp"]) > TIMESTAMP_TOLERANCE_MS:
+        if (
+            check_timestamp
+            and abs(int(time.time() * 1000) - auth["timestamp"]) > TIMESTAMP_TOLERANCE_MS
+        ):
             raise ValueError("时间戳验证失败：消息过期")
 
         e_i = bytes.fromhex(auth["auth_data"]["ephemeral_pub"])
@@ -473,7 +477,10 @@ class ReferenceSIP:
         if hello.get("version") != PROTOCOL_VERSION:
             raise ValueError(f"不支持的协议版本: {hello.get('version')}")
         negotiate_suite(hello.get("suite", SUITE_EN), suite)
-        if check_timestamp and abs(int(time.time() * 1000) - hello["timestamp"]) > TIMESTAMP_TOLERANCE_MS:
+        if (
+            check_timestamp
+            and abs(int(time.time() * 1000) - hello["timestamp"]) > TIMESTAMP_TOLERANCE_MS
+        ):
             raise ValueError("时间戳验证失败：消息过期")
 
         e_i = bytes.fromhex(hello["ephemeral_pub"])
@@ -483,9 +490,7 @@ class ReferenceSIP:
         def pub_of(priv: bytes) -> bytes:
             return sm2_pub_of(priv) if suite == SUITE_ZH else _pub_of(priv)
 
-        id_priv, id_pub = (
-            gen() if identity_priv is None else (identity_priv, pub_of(identity_priv))
-        )
+        id_priv, id_pub = gen() if identity_priv is None else (identity_priv, pub_of(identity_priv))
         eph_priv, eph_pub = (
             gen() if ephemeral_priv is None else (ephemeral_priv, pub_of(ephemeral_priv))
         )
@@ -534,9 +539,7 @@ class ReferenceSession:
     @staticmethod
     def replay_tag(replay_key: bytes, sender_id: str, counter: int, suite: str = SUITE_EN) -> str:
         """HMAC(replay_key, "{sender_id}:{counter}") → hex（SPEC §6.1；摘要随套件分派）"""
-        return hmac_digest(
-            replay_key, f"{sender_id}:{counter}".encode(), suite
-        ).hex()
+        return hmac_digest(replay_key, f"{sender_id}:{counter}".encode(), suite).hex()
 
     def encrypt(self, plaintext: str, recipient_id: str, nonce: bytes | None = None) -> dict:
         """加密消息字典（wire 格式 §6.1；nonce 可注入用于确定性测试向量）"""
@@ -644,7 +647,10 @@ class ReferenceRekey:
     def process_response(self, response: dict, check_timestamp: bool = True) -> dict[str, bytes]:
         if response.get("version") != PROTOCOL_VERSION:
             raise ValueError("Invalid rekey response")
-        if check_timestamp and abs(int(time.time() * 1000) - response["timestamp"]) > TIMESTAMP_TOLERANCE_MS:
+        if (
+            check_timestamp
+            and abs(int(time.time() * 1000) - response["timestamp"]) > TIMESTAMP_TOLERANCE_MS
+        ):
             raise ValueError("Invalid rekey response")
         if response["sequence"] != self.sequence - 1:
             raise ValueError("Invalid rekey response")
@@ -661,7 +667,9 @@ class ReferenceRekey:
         peer_pub = base64.b64decode(eph_b64)
         shared = dh_for_suite(self._eph_priv, peer_pub, self.suite)
         # 请求方 nonce（自己，在前）在前、响应方 nonce 在后（SPEC §7.4）
-        return derive_rekey_keys(shared, self.keys, self._nonce, base64.b64decode(nonce_b64), self.suite)
+        return derive_rekey_keys(
+            shared, self.keys, self._nonce, base64.b64decode(nonce_b64), self.suite
+        )
 
 
 def derive_rekey_keys(
@@ -711,7 +719,10 @@ def handle_rekey_request(
     validate_suite(suite)
     if request.get("version") != PROTOCOL_VERSION:
         raise ValueError("Invalid rekey request")
-    if check_timestamp and abs(int(time.time() * 1000) - request["timestamp"]) > TIMESTAMP_TOLERANCE_MS:
+    if (
+        check_timestamp
+        and abs(int(time.time() * 1000) - request["timestamp"]) > TIMESTAMP_TOLERANCE_MS
+    ):
         raise ValueError("Invalid rekey request")
     if seen_sequence > 0 and request["sequence"] <= seen_sequence:
         raise ValueError("Invalid rekey request")
@@ -770,9 +781,7 @@ def sipft_header_key(master_key: bytes, suite: str = SUITE_EN) -> bytes:
 
 
 def sipft_chunk_key(master_key: bytes, file_id: bytes, index: int, suite: str = SUITE_EN) -> bytes:
-    return hkdf_for_suite(
-        master_key, file_id, b"chunk:%d" % index, _sipft_key_length(suite), suite
-    )
+    return hkdf_for_suite(master_key, file_id, b"chunk:%d" % index, _sipft_key_length(suite), suite)
 
 
 def pack_artifact(
@@ -803,7 +812,7 @@ def pack_artifact(
         ensure_ascii=False,
     ).encode()
 
-    h_nonce = (nonces[0] if nonces else os.urandom(12))
+    h_nonce = nonces[0] if nonces else os.urandom(12)
     h_ct, h_tag = aead_seal(
         sipft_header_key(master_key, suite), h_nonce, header, SIPFT_MAGIC, suite
     )
@@ -825,7 +834,9 @@ def pack_artifact(
     return bytes(out)
 
 
-def unpack_artifact(artifact: bytes, master_key: bytes, suite: str = SUITE_EN) -> tuple[bytes, dict]:
+def unpack_artifact(
+    artifact: bytes, master_key: bytes, suite: str = SUITE_EN
+) -> tuple[bytes, dict]:
     """校验并解包 SIPFT1.0 工件。任何认证失败抛 ValueError（fail-fast §9.6）"""
     validate_suite(suite)
     pos = 0

@@ -46,7 +46,9 @@ FILE_ID = bytes.fromhex("00112233445566778899aabbccddeeff")
 FILE_NONCES = [bytes([0xA0 + i]) * 12 for i in range(3)]  # 头 + 块0 + 块1
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "tests" / "vectors" / "sip_test_vectors.json"
-DEFAULT_OUTPUT_ZH = Path(__file__).resolve().parents[2] / "tests" / "vectors" / "sip_test_vectors_zh.json"
+DEFAULT_OUTPUT_ZH = (
+    Path(__file__).resolve().parents[2] / "tests" / "vectors" / "sip_test_vectors_zh.json"
+)
 
 
 def build_vectors(suite: str = SUITE_EN) -> dict:
@@ -139,7 +141,9 @@ def build_vectors(suite: str = SUITE_EN) -> dict:
         "request_ephemeral_priv": req_eph_priv,
         "request_nonce_hex": req_nonce.hex(),
         # 响应方临时私钥在 mgr_b 上未清理，可直接捕获
-        "response_ephemeral_priv": serialize_private_key(mgr_b._temp_new_ephemeral_private_key).hex(),
+        "response_ephemeral_priv": serialize_private_key(
+            mgr_b._temp_new_ephemeral_private_key
+        ).hex(),
         "response_nonce_hex": mgr_b._temp_new_ephemeral_nonce.hex(),
         "old_keys": {k: v.hex() for k, v in old_keys.items()},
         "expected_new_keys": {k: v.hex() for k, v in new_keys_a.items()},
@@ -147,7 +151,9 @@ def build_vectors(suite: str = SUITE_EN) -> dict:
 
     # ── 4. SIPFT1.0 工件：固定 file_id/nonce 打包，导出工件字节 ──
     master_key = bytes(range(32))
-    tmp_in = (DEFAULT_OUTPUT.parent if suite == SUITE_EN else DEFAULT_OUTPUT_ZH.parent) / "_vector_source.bin"
+    tmp_in = (
+        DEFAULT_OUTPUT.parent if suite == SUITE_EN else DEFAULT_OUTPUT_ZH.parent
+    ) / "_vector_source.bin"
     tmp_in.parent.mkdir(parents=True, exist_ok=True)
     tmp_in.write_bytes(FILE_PLAINTEXT)
 
