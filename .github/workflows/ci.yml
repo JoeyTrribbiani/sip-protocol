@@ -4,10 +4,14 @@ name: CI
 # L2 静态检查 / L3 类型检查 / L4 测试+覆盖率 / L5 安全审计
 # 档位 A 打包验证（python-project-standard #7/#8）：wheel 文件清单核验
 # L6 性能为可选未启用（纯加密核心以 pytest 覆盖）
+# release job 仅 tag 触发（refs/tags/v*），needs 既有两 job：全绿后自动
+# 发 GitHub Release，notes 取 CHANGELOG 对应 tag 定版节；tag 格式不符/
+# 缺定版节/空节即红（防呆在 CI 层，不发空 notes）；同名 Release 已存在则跳过
 
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]  # 新增 tag 触发面；分支 push / PR 触发条件与原先一致
   pull_request:
     branches: [ main ]
 
@@ -97,3 +101,60 @@ jobs:
     # PYSEC-2026-3447 为 runner 预装 setuptools 79.0.1 < 修复版 83.0.0，非项目依赖）
     - name: Python audit
       run: uv run pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln PYSEC-2026-3447
+
+  # 发版自动化：tag push 触发整条 CI，本 job 殿后——全绿即 Release 就位。
+  release:
+    name: Release (tag only, auto after green)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [python-test, security-audit]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: 校验 tag 格式（vX.Y.Z）
+      run: |
+        echo "tag: ${GITHUB_REF_NAME}"
+        grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' <<<"${GITHUB_REF_NAME}" \
+          || { echo "::error::tag 格式应为 vX.Y.Z，实际 ${GITHUB_REF_NAME}"; exit 1; }
+
+    # 提取仅用 stdlib（re/os/sys），系统 python3 即可，不 uv sync
+    - name: 提取 CHANGELOG 定版节为 notes（缺节/空节即红，不发空 notes）
+      run: |
+        python3 - <<'EOF'
+        import os
+        import re
+        import sys
+
+        tag = os.environ["GITHUB_REF_NAME"]  # 如 v2.2.0
+        ver = tag[1:]  # CHANGELOG 节头无 v 前缀
+        text = open("CHANGELOG.md", encoding="utf-8").read()
+        # 精确匹配节头 ## [X.Y.Z] 整行——[Unreleased]/其他版本/子串不会误命中
+        m = re.search(rf"^## \[{re.escape(ver)}\][^\n]*$", text, re.M)
+        if m is None:
+            sys.exit(f"CHANGELOG.md 无 [{ver}] 定版节——先定版再打 tag")
+        rest = text[m.end():]
+        # 节尾边界：下一节头，或 Keep a Changelog 尾部 [x.y.z]: url 链接引用定义
+        nxt = re.search(r"^## \[|^\[.+\]:", rest, re.M)
+        body = rest[: nxt.start()] if nxt else rest
+        # 剥节尾 --- 分隔线（本仓节间有分隔线）与首尾空行；节头行不入 notes
+        body = re.sub(r"\n-{3,}\s*$", "", body).strip()
+        if not body:
+            sys.exit(f"CHANGELOG.md [{ver}] 定版节为空——不发空 notes")
+        with open("release-notes.md", "w", encoding="utf-8") as f:
+            f.write(body + "\n")
+        print(f"notes 提取成功：[{ver}] 定版节 {body.count(chr(10)) + 1} 行")
+        EOF
+
+    - name: 创建 GitHub Release（非 draft 非 prerelease；已存在则跳过）
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+          echo "Release ${GITHUB_REF_NAME} 已存在（可能手工补发过）——跳过创建"
+          exit 0
+        fi
+        gh release create "${GITHUB_REF_NAME}" --notes-file release-notes.md

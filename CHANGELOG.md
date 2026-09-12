@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 新增
+
+- **发版自动化**：CI 加 release job（仅 tag 触发，`needs` 既有
+  python-test + security-audit，既有触发条件零改动）——CI 全绿后自动
+  创建 GitHub Release，notes 从 CHANGELOG 对应 tag 定版节提取
+  （缺节/空节/tag 格式不符 CI 层红，不发空 notes；同名 Release 已存在
+  则跳过）。AGENTS.md 新增「CI 与发版」节（发版标准 5 条 + 触发链条）
+
+---
+
 ## [2.2.0] - 2026-09-12
 
 ### 新增（国密套件 ZH：SM2/SM3/SM4-GCM，v2.2.0）
