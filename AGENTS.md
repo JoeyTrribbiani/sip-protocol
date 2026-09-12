@@ -119,3 +119,22 @@ transport/ ──→ protocol/ ──→ crypto/
 - **MCP 入口** — `python3.11 -m sip_protocol --psk <key> --agent-id <id>`（openclaw.json 通路，改造不可破坏；
   可选 `--suite ZH` 走国密，缺省 EN 不带该参数即历史行为）
 - **v2.0 已移除** — schema/discovery/group/decision/fragment/offline_queue/persistence/resume/version/各平台适配器/javascript（git 历史 ≤ v1.4.0 可回溯）；file_transfer 已于 v2.1 以 `filetransfer/` 按新架构重建
+
+## CI 与发版
+
+- CI（`.github/workflows/ci.yml`）：python-test（L1-L4 + wheel 清单核验）+
+  security-audit（L5 pip-audit）+ release（仅 tag 触发：全绿后自动发）。
+- 发版标准（tag `vX.Y.Z`）：
+  1. python-test + security-audit 全绿（CI 佐证）
+  2. `CHANGELOG.md` 已写该版本定版节（`## [X.Y.Z] - 日期`）
+  3. SPEC-first 完整性：协议行为变更已同步 SPEC（含 §14 交叉索引）与
+     互操作向量（EN + ZH 两份），发布说明引用 SPEC 版本号
+  4. tag 格式 `vX.Y.Z`，打 tag 的 commit 必须是绿 CI 的 main HEAD
+  5. tag 推送后 CI 全绿 → release job 自动发 GitHub Release（notes 取
+     CHANGELOG 对应 tag 定版节）；若自动发布失败，手工补发路径：
+     `gh release create vX.Y.Z --notes-file <定版节内容文件>`
+- 触发链条：push tag `v*` → CI（python-test + security-audit + release
+  job）→ 全绿即 GitHub Release 就位。release job 防呆：tag 格式不符
+  即红；CHANGELOG 无对应定版节/空节即红（不发空 notes）；同名 Release
+  已存在则跳过（手工补发后重跑不冲突）。分支 push/PR 触发条件与原先
+  完全一致。
