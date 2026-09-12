@@ -193,6 +193,20 @@ class FragmentError(ProtocolError):
         super().__init__(message=message, **kwargs)
 
 
+@_register_error
+@dataclass
+class SuiteNegotiationError(ProtocolError, ValueError):
+    """密码套件协商失败（SPEC v1.1 §4.5：EN/ZH 不匹配或 suite 字段非法）
+
+    双继承 ValueError：与 VersionNegotiationError 同型，保持既有
+    except ValueError 捕获路径兼容（MCP 错误映射 -32005）。
+    """
+
+    def __init__(self, message: str = "密码套件协商失败", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-PROTO-005")
+        super().__init__(message=message, **kwargs)
+
+
 # ==================== 消息层异常 ====================
 
 
