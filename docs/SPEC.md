@@ -4,13 +4,14 @@
 
 | | |
 |---|---|
-| 规范版本 | SPEC v1.0 |
-| 线协议版本 | SIP-1.0 / SIP-TRANSPORT-1.0 / SIPFT1.0 |
+| 规范版本 | SPEC v1.1（v1.0 + 国密套件 ZH：SM2/SM3/SM4-GCM，向后兼容） |
+| 线协议版本 | SIP-1.0 / SIP-TRANSPORT-1.0 / SIPFT1.0（套件演进不改线协议版本，见 §11.3） |
 | 状态 | Experimental / Living（随实现演进，代码为唯一事实源） |
 | 参考实现 | `src/sip_protocol/`（本仓库） |
 | 独立互操作实现 | `scripts/interop/reference_impl.py`（从本规范反推，不读主库源码） |
-| 测试向量 | `tests/vectors/sip_test_vectors.json` |
-| 最后更新 | 2026-09-11 |
+| 测试向量 | `tests/vectors/sip_test_vectors.json`（EN）/ `sip_test_vectors_zh.json`（ZH） |
+| 密码套件选型 | `docs/adr/001-sm-crypto-lib.md`（ZH 原语来源决策记录） |
+| 最后更新 | 2026-09-12 |
 
 > **命名声明**：本协议的 SIP 指 **Secure Inter-agent Protocol**（Agent 间端到端加密通道协议），
 > 与 IETF RFC 3261 定义的 SIP（Session Initiation Protocol，VoIP 会话发起协议）**无关**：
@@ -47,13 +48,14 @@
 | 术语 | 定义 |
 |------|------|
 | **SIP** | Secure Inter-agent Protocol，本协议。与 RFC 3261 无关（见文首声明） |
+| **密码套件（suite）** | 握手时协商的原语组合：`EN`（国际，缺省：X25519/ChaCha20-Poly1305/HKDF-SHA256/HMAC-SHA256）或 `ZH`（国密：SM2/SM4-GCM/HKDF-SM3/HMAC-SM3），见 §3/§4.2 |
 | **Agent** | 协议端点。每个 Agent 拥有唯一的 `agent_id`（UTF-8 字符串，格式由宿主定义，如 `agent:hermes::session:abc`） |
 | **initiator** | 握手发起方。生成 Hello，最终执行 Complete |
 | **responder** | 握手响应方。接收 Hello，回 Auth |
 | `PSK` | 预共享密钥（任意字节串）。用于抵抗中间人攻击：不知道 PSK 的攻击者无法派生出正确会话密钥 |
-| 身份密钥对 | 长期 X25519 密钥对（可跨会话持久化），32 字节公钥 |
-| 临时密钥对 | 每次握手新生成的 X25519 密钥对，用后即弃 |
-| 会话密钥 | 握手派生的三元组：`encryption_key` / `auth_key` / `replay_key`，各 32 字节 |
+| 身份密钥对 | 长期密钥对（可跨会话持久化）。EN 套件为 X25519（公钥 32 字节 Raw）；ZH 套件为 SM2（公钥 65 字节非压缩 `0x04‖X‖Y`，GM/T 0003.5 推荐曲线） |
+| 临时密钥对 | 每次握手新生成的密钥对（与身份密钥同套件同编码），用后即弃 |
+| 会话密钥 | 握手派生的三元组：`encryption_key` / `auth_key` / `replay_key`。EN 为 32+32+32 字节；ZH 为 **16+32+32** 字节（SM4-128 + 两把 HMAC-SM3 密钥），见 §5 |
 | 会话消息 | 握手完成后双方交换的加密消息（§6） |
 | 工件（artifact） | SIPFT1.0 格式的自包含加密文件（§9） |
 | MUST / MUST NOT / SHOULD / MAY | RFC 2119 语义 |
@@ -78,8 +80,10 @@ responder:  (I_r, I_r_pub)                (E_r, E_r_pub)                N_r
 ├────────────────────────────────────────────────┤
 │ 协议层：握手 / 会话消息 / Rekey（本规范 §4-§8）      │
 ├────────────────────────────────────────────────┤
-│ 原语层：X25519 · ChaCha20-Poly1305 · HKDF-SHA256   │
-│         Argon2id · HMAC-SHA256（§3）               │
+│ 原语层（EN）：X25519 · ChaCha20-Poly1305           │
+│             HKDF-SHA256 · Argon2id · HMAC-SHA256  │
+│ 原语层（ZH）：SM2 · SM4-GCM · HKDF-SM3 · HMAC-SM3  │
+│             （Argon2id 套件无关，§3）（§3）          │
 └────────────────────────────────────────────────┘
 ```
 
@@ -158,19 +162,39 @@ stateDiagram-v2
 
 ## 3. 密码学原语与参数
 
-| 用途 | 算法 | 参数 | 模块 |
-|------|------|------|------|
-| 密钥交换 | X25519（RFC 7748） | 公钥 32 字节 Raw 编码 | `crypto/dh.py` |
-| AEAD | **ChaCha20-Poly1305（RFC 8439）** | 256 位密钥；**96 位随机 nonce**；128 位标签 | `crypto/xchacha20_poly1305.py` |
-| 密钥派生 | HKDF-SHA256（RFC 5869） | 见 §5 / §7 / §9 各标签 | `crypto/hkdf.py` |
-| PSK 哈希 | Argon2id（RFC 9106） | `t=3, m=64 MiB, p=4, len=32`；盐 **固定** `b"SIPProtocolTestSalt"` | `crypto/argon2.py` |
-| 认证标签 | HMAC-SHA256 | 见各消息节 | 各协议模块 |
+v1.1 起本协议支持两套**密码套件**，握手时经 Hello 的可选 `suite` 字段协商（§4.2）：
+`EN`（缺省，v1.0 既有行为）与 `ZH`（国密 SM 系列）。同一会话全程单一套件，
+跨套件消息一律认证失败（§4.5）。
+
+| 用途 | EN（国际，缺省） | ZH（国密） | 模块 |
+|------|------------------|-----------|------|
+| 密钥交换 | X25519（RFC 7748），公钥 32B Raw | SM2 原始 ECDH（GM/T 0003.5 推荐曲线 sm2p256v1），公钥 65B 非压缩 `0x04‖X‖Y`；共享秘密 = [d]P 的 x 坐标 32B（见偏差 D9） | `crypto/dh.py` + `crypto/sm2.py` |
+| AEAD | ChaCha20-Poly1305（RFC 8439），256 位密钥 | **SM4-GCM**（RFC 8998 事实标准化形态，见偏差 D10），**128 位密钥**；nonce/tag 尺寸与 EN 同构（96 位 nonce / 128 位 tag） | `crypto/xchacha20_poly1305.py`（分派）+ `crypto/sm4_gcm.py` |
+| 密钥派生 | HKDF-SHA256（RFC 5869） | HKDF-SM3（同 RFC 5869 构造，SM3 作 PRF，RFC 8998 同构） | `crypto/hkdf.py` |
+| PSK 哈希 | Argon2id（RFC 9106），**套件无关**（ADR-001：商密体系无内存困难 KDF 等价物，PSK 路径红线不动） | 同左 | `crypto/argon2.py` |
+| 认证标签 | HMAC-SHA256 | HMAC-SM3（RFC 2104 构造） | `crypto/sm3.py` + `crypto/suite.py` |
+| 杂凑（SM3） | — | GM/T 0004-2012，256 位摘要 / 512 位分组 | `crypto/sm3.py` |
+
+实现来源（ADR-001）：SM3/SM4-GCM 走 `cryptography`（OpenSSL 3 C 实现，
+依赖下限 42.0.0）；SM2 曲线运算为本库自研纯 Python（仿射 double-and-add，
+`crypto/sm2.py`），与 gmssl 独立实现在测试中双向交叉验证。
 
 > **AEAD 命名偏差（重要）**：模块名为 `xchacha20_poly1305`，但 Python 实现实际调用
 > `cryptography.ChaCha20Poly1305`，即 **12 字节 nonce 的 ChaCha20-Poly1305**，
 > **不是** 24 字节 nonce 的 XChaCha20-Poly1305（draft-irtf-cfrg-xchacha）。
-> 本规范按实现记述为 ChaCha20-Poly1305；所有 wire 上的 nonce 长度均为 12 字节。
+> 本规范按实现记述为 ChaCha20-Poly1305；所有 wire 上的 nonce 长度均为 12 字节
+> （两套件同）。v1.1 起该模块同时承载 ZH 套件的 SM4-GCM 分派（缺省 EN 行为不变）。
 > 详见 §13 偏差 D1。
+
+> **ZH 套件如实记述（重要）**：
+> - SM4-GCM 在 GB/T 体系内无单一强制 AEAD 标准，由 RFC 8998
+>   （TLS 1.3 套件 TLS_SM4_GCM_SM3）事实标准化（偏差 D10）；
+> - SM2 密钥交换采用原始 ECDH（x 坐标），非 GM/T 0003.3 完整密钥交换协议
+>   （后者含显式确认流，与三重 DH 构造不兼容；身份绑定由 K1/K2 交叉 + PSK
+>   混入 IKM 提供，与 EN 同构，偏差 D9）；
+> - `crypto/sm2.py` 纯 Python 非常量时间（§12.11）；对端公钥先做在曲线/
+>   非无穷远点校验（防无效曲线攻击）；
+> - 本实现为通用分发库，**不宣称商密合规认证**。
 
 > **AES-256-GCM**（`crypto/aes_gcm.py`）为备选原语（12 字节 IV），
 > 当前无任何 wire 路径引用，仅作为独立原语提供。
@@ -210,9 +234,10 @@ initiator                                                responder
 | `type` | str | — | `"handshake"` |
 | `step` | str | — | `"hello"` |
 | `timestamp` | int | Unix ms | 生成时刻 |
-| `identity_pub` | str | **hex**（64 字符） | I_i_pub，32 字节 |
-| `ephemeral_pub` | str | **hex**（64 字符） | E_i_pub，32 字节 |
+| `identity_pub` | str | **hex** | I_i_pub。EN：64 字符（32 字节）；ZH：130 字符（65 字节非压缩点） |
+| `ephemeral_pub` | str | **hex** | E_i_pub，编码同上 |
 | `nonce` | str | **hex**（32 字符） | N_i，16 字节随机 |
+| `suite` | str | — | **可选**（v1.1，仅 ZH 携带 `"ZH"`）。**缺省 = EN**（旧 peer 无此字段）；非法值拒绝（§4.5）。EN 套件 MUST NOT 携带此字段（wire 逐字节不变，§11.3） |
 
 **Auth**（responder → initiator，信封 `action=handshake_complete`）：
 
@@ -222,10 +247,11 @@ initiator                                                responder
 | `type` | str | — | `"handshake"` |
 | `step` | str | — | `"auth"` |
 | `timestamp` | int | Unix ms | 与 `auth_data` HMAC 中时间戳同一值 |
-| `identity_pub` | str | hex | I_r_pub（**顶层字段，不在 HMAC 覆盖范围内**，经 KDF 隐式认证） |
+| `identity_pub` | str | hex | I_r_pub（**顶层字段，不在 HMAC 覆盖范围内**，经 KDF 隐式认证）；编码随套件（同上） |
 | `auth_data.ephemeral_pub` | str | hex | E_r_pub |
 | `auth_data.nonce` | str | hex | N_r，16 字节 |
-| `signature` | str | base64 | HMAC-SHA256(auth_key, T_auth)，32 字节，见 §4.4 |
+| `signature` | str | base64 | HMAC(auth_key, T_auth)，32 字节，见 §4.4；EN → HMAC-SHA256，ZH → HMAC-SM3 |
+| `suite` | str | — | **可选**（v1.1，仅 ZH 回显 `"ZH"`，initiator 侧校验点）；缺省 = EN |
 
 **Complete**（initiator → responder，可选回执）：
 
@@ -238,7 +264,8 @@ initiator                                                responder
 
 ### 4.3 三重 DH 计算
 
-双方独立计算三个共享密钥（X25519 乘法交换律保证两侧一致）：
+双方独立计算三个共享密钥（DH 乘法交换律保证两侧一致；两套件同构——
+EN 为 X25519，ZH 为 SM2 原始 ECDH，见 §3/偏差 D9）：
 
 | 记号 | initiator 视角 | responder 视角 |
 |------|---------------|----------------|
@@ -270,7 +297,20 @@ signature = HMAC-SHA256(auth_key, T_auth)
 `identity_pub` 不在 T_auth 内：被篡改的 I_r_pub 会导致 initiator 派生的 K2 错误、
 进而 auth_key 错误、HMAC 验证失败——隐式认证，无需显式覆盖。
 
-### 4.5 时间戳与错误路径
+### 4.5 时间戳、套件协商与错误路径
+
+**套件协商（v1.1）**：responder 收 Hello 后，按 `offered = hello.get("suite", "EN")`
+与本地配置比对——**单选语义，无降级回退**（与 §11.2 版本拒绝的防降级哲学一致）：
+
+- `offered` 非 `EN`/`ZH` → 拒绝（`SuiteNegotiationError`，"未知的密码套件"）；
+- `offered != 本地配置` → 拒绝（同异常，消息明示双方要求）；
+- 公钥字节长度与套件不符（如 suite 字段被剥离的 ZH Hello 打到 EN 端）→ 拒绝
+  （同异常，"公钥长度与套件不符"——剥离降级在密码学计算之前暴露）；
+- initiator 收 Auth 后校验回显 suite 与本地一致（ZH 必须回显，见 §4.2）。
+
+任何套件协商失败都发生在**任何密码学计算之前**，MUST NOT 回显密钥派生中间值。
+`SuiteNegotiationError`（SIP-PROTO-005）双继承 `ValueError`，与
+`VersionNegotiationError` 同型的既有捕获路径兼容（MCP 映射 -32005）。
 
 | 阶段 | 检查 | 失败行为（当前实现） |
 |------|------|---------------------|
@@ -279,6 +319,7 @@ signature = HMAC-SHA256(auth_key, T_auth)
 | initiator 验 HMAC | `hmac.compare_digest` | 抛 `ValueError("HMAC签名验证失败")` |
 | responder 收 Hello `version ≠ "SIP-1.0"` | 版本校验 | 抛 `VersionNegotiationError`（SIP-PROTO-003，§11） |
 | initiator 收 Auth `version ≠ "SIP-1.0"` | 版本校验 | 同上 |
+| 套件协商（上节四条） | 版本校验之后、密码学计算之前 | 抛 `SuiteNegotiationError`（SIP-PROTO-005） |
 | 任一 hex/base64 字段非法 | 解析 | 抛 `ValueError`（库捕获层） |
 
 通道层语义：任一握手异常 → 通道进入 ERROR 状态，统计 `errors += 1`，
@@ -297,9 +338,12 @@ MAY 发送；接收方 MAY 验证（key = 双方 auth_key，覆盖 `json.dumps({
 - **中间人抵抗**：IKM 混入 `psk_hash`——不知道 PSK 的 MITM 无法构造正确密钥，
   Auth 的 HMAC 验证必然失败。
 - **身份绑定**：K1/K2 把双方**身份**公钥与**临时**公钥交叉绑入密钥（Triple DH 经典构造），
-  防未知密钥共享（UKS）。
+  防未知密钥共享（UKS）。两套件同构（ZH 的 SM2 ECDH 同样满足交换律与交叉绑定）。
 - **前向保密**：K3 为纯临时-临时 DH；握手后销毁临时私钥（超出对象生命周期即不可再算）
   ⇒ 长期身份密钥泄露不回溯暴露会话。
+- **降级抵抗（v1.1）**：套件为单选协商、无回退（§4.5）；suite 字段被剥离/篡改时，
+  双方密钥派生域不同（SM3 ≠ SHA256、SM2 ≠ X25519 公钥编码），HMAC/AEAD 必然失败——
+  不存在"静默降到 EN/ZH 继续通信"的路径。
 - PSK 哈希使用固定盐（§13 偏差 D2）：防御目标是**在线穷举**（每次握手需完整 Argon2id +
   DH + HKDF），不依赖盐随机性；但同 PSK 的握手在盐维度无区分度，见 §12。
 
@@ -310,22 +354,30 @@ MAY 发送；接收方 MAY 验证（key = 双方 auth_key，覆盖 `json.dumps({
 ```
                     ┌──────────────────────────────────────────┐
                     │ IKM = K1‖K2‖K3‖psk_hash‖N_i‖N_r           │
-                    │ HKDF-SHA256(salt=b"SIPHandshake",         │
-                    │             info=b"session-keys", L=96)   │
+                    │ EN: HKDF-SHA256  ZH: HKDF-SM3             │
+                    │   (salt=b"SIPHandshake",                   │
+                    │    info=b"session-keys")                   │
+                    │ EN: L=96 → 3×32   ZH: L=80 → 16+32+32     │
                     └──────────────┬───────────────────────────┘
                                    │ 连续切割
-             ┌─────────────────────┼─────────────────────┐
-             ▼                     ▼                     ▼
-   encryption_key[0:32]     auth_key[32:64]      replay_key[64:96]
-   （AEAD 消息加密）      （握手/rekey HMAC）   （replay_tag HMAC）
+             ┌─────────────────────┼──────────────────────┐
+             ▼                     ▼                      ▼
+   encryption_key           auth_key                replay_key
+   EN [0:32] / ZH [0:16]    EN [32:64] / ZH[16:48]  EN [64:96] / ZH[48:80]
+   （AEAD 消息加密；ZH       （握手/rekey HMAC；       （replay_tag HMAC；
+     为 SM4-128 密钥）        两套件均 32 字节）        两套件均 32 字节）
                                    │
                     Rekey 时（§7）：全新 ephemeral DH + 旧三元组链入
                     HKDF(salt=b"SIPRekey", info=b"SIP-rekey") → 新三元组
+                    （切分比例与握手派生相同：EN 96 / ZH 80）
                                    │
                     文件工件（§9）：master_key（建议=encryption_key）
-                    → header/chunk 子密钥（HKDF 独立标签树）
+                    → header/chunk 子密钥（HKDF 独立标签树；
+                      ZH 的子密钥长度为 16 字节，§9.3）
 ```
 
+盐/信息串（`b"SIPHandshake"` / `b"session-keys"` / `b"SIPRekey"` / `b"SIP-rekey"`）
+**跨套件相同**——套件隔离由 PRF 本身（SHA256 vs SM3）保证，不依赖标签差异化。
 三把密钥职责**强隔离**：AEAD 永不使用 auth_key/replay_key，HMAC 永不使用
 encryption_key——单一密钥泄露不横向扩散。rekey 后三元组整体轮换（§7），
 旧密钥尽力擦除（bytearray 可 memset；bytes 不可变，无法保证清零，实现已知限制）。
@@ -346,18 +398,17 @@ encryption_key——单一密钥泄露不横向扩散。rekey 后三元组整体
 | `sender_id` | str | | 发送方 agent_id |
 | `recipient_id` | str | | 接收方 agent_id |
 | `message_counter` | int | | 发送方单调递增计数（从 1 起） |
-| `iv` | str | base64 | **12 字节随机 nonce** |
+| `iv` | str | base64 | **12 字节随机 nonce**（两套件同长） |
 | `payload` | str | base64 | 密文（与明文等长） |
 | `auth_tag` | str | base64 | 16 字节 AEAD 标签 |
-| `replay_tag` | str | hex | 64 字符，HMAC-SHA256(replay_key, `f"{sender_id}:{message_counter}"`)；提供 replay_key 时 MUST 存在 |
+| `replay_tag` | str | hex | 64 字符，HMAC(replay_key, `f"{sender_id}:{message_counter}"`)——EN 为 HMAC-SHA256，ZH 为 HMAC-SM3；提供 replay_key 时 MUST 存在 |
+| `suite` | str | — | **可选**（v1.1，仅 ZH 携带 `"ZH"`）。解密侧**自描述**：缺省 EN；非法值拒绝。EN 套件 MUST NOT 携带（wire 逐字节不变） |
 
 密文计算（**AAD = None**，会话消息不使用 AAD）：
 
 ```
-(ciphertext, tag) = ChaCha20-Poly1305_SEAL(encryption_key,
-                                           nonce = iv,
-                                           plaintext = UTF-8(text),
-                                           aad = None)
+EN: (ciphertext, tag) = ChaCha20-Poly1305_SEAL(encryption_key[32B], nonce=iv, plaintext, aad=None)
+ZH: (ciphertext, tag) = SM4-GCM_SEAL(encryption_key[16B], nonce=iv, plaintext, aad=None)
 ```
 
 ### 6.2 接收端处理顺序（ MUST 按序）
@@ -430,12 +481,18 @@ encryption_key——单一密钥泄露不横向扩散。rekey 后三元组整体
 ### 7.4 新密钥派生（双方一致）
 
 ```
-shared = X25519(E_new_local, E_new_peer)          // 全新临时-临时 DH
+shared = DH(E_new_local, E_new_peer)          // 全新临时-临时 DH（EN→X25519；ZH→SM2）
 IKM    = shared ‖ encryption_key ‖ auth_key ‖ replay_key   // 旧三元组链入
          ‖ N_req ‖ N_resp                          // 请求方 nonce 在前
-OKM    = HKDF-SHA256(IKM, salt=b"SIPRekey", info=b"SIP-rekey", L=96)
-new(encryption_key, auth_key, replay_key) = OKM[0:32] ‖ OKM[32:64] ‖ OKM[64:96]
+EN:  OKM = HKDF-SHA256(IKM, salt=b"SIPRekey", info=b"SIP-rekey", L=96)
+     new 三元组 = OKM[0:32] ‖ OKM[32:64] ‖ OKM[64:96]
+ZH:  OKM = HKDF-SM3(IKM,   salt=b"SIPRekey", info=b"SIP-rekey", L=80)
+     new 三元组 = OKM[0:16] ‖ OKM[16:48] ‖ OKM[48:80]   // SM4-128 + 2×32B
 ```
+
+Rekey 消息内的 `ephemeral_pub` 编码随会话套件（EN 32B / ZH 65B，base64）；
+签名摘要随套件（HMAC-SHA256 / HMAC-SM3）。会话状态携带 suite（缺省 EN），
+rekey 双方按同一套件派生——跨套件 rekey 因签名验证失败而被拒绝（fail-closed）。
 
 ### 7.5 应用与切换时序
 
@@ -501,15 +558,21 @@ L2 的 replay_tag 把 (sender_id, counter) 绑定到会话专属 replay_key ⇒ 
 }
 ```
 
-### 9.3 密钥调度（HKDF-SHA256 标签树）
+### 9.3 密钥调度（HKDF 标签树，套件为带外约定）
 
 ```
-header_key = HKDF(master_key, salt=b"SIP-FileTransfer", info=b"header",     L=32)
-chunk_key_i = HKDF(master_key, salt=file_id（16 字节原始值）, info=b"chunk:{i}", L=32)
+EN:  header_key  = HKDF-SHA256(master_key, salt=b"SIP-FileTransfer", info=b"header",    L=32)
+     chunk_key_i = HKDF-SHA256(master_key, salt=file_id（16 字节原始值）, info=b"chunk:{i}", L=32)
+ZH:  header_key  = HKDF-SM3(master_key,   salt=b"SIP-FileTransfer", info=b"header",    L=16)
+     chunk_key_i = HKDF-SM3(master_key,   salt=file_id,              info=b"chunk:{i}", L=16)
 ```
 
 `i` 为十进制 ASCII（`b"chunk:0"`, `b"chunk:1"`, …）。每块独立密钥 ⇒ 单块密钥泄露
 不扩散；file_id 作盐 ⇒ 密钥绑定到本工件（跨工件拼接失效）。
+
+**套件是带外信息**（与 master_key 同理由调用方约定）：工件二进制布局两套件
+完全同构（nonce/tag/AAD 尺寸一致），工件内**不携带**套件标识；解包方以错误套件
+打开时表现为头部认证失败——与密钥错误不可区分（防 oracle，§9.6）。
 
 ### 9.4 AAD 与 tag 链
 
@@ -561,6 +624,7 @@ prev_tag 初值 = header_tag；此后 prev_tag_{i} = chunk_tag_{i-1}
 | SIP-PROTO-002 | `RekeyError` | medium | ✓ | 保留 |
 | **SIP-PROTO-003** | `VersionNegotiationError` | medium | ✓ | **生效**：握手版本不匹配（§4.5、§11） |
 | SIP-PROTO-004 | `FragmentError` | medium | ✓ | 保留（v2.0 已移除分片功能） |
+| **SIP-PROTO-005** | `SuiteNegotiationError` | medium | ✓ | **生效**（v1.1）：套件协商失败——EN/ZH 不匹配、suite 字段非法、公钥长度与套件不符（§4.5）；双继承 ValueError |
 | SIP-MSG-000 | `MessageError` | medium | ✓ | 基类 |
 | **SIP-MSG-001** | `MessageSchemaError` | medium | ✓ | **生效**：信封版本不匹配（§11） |
 | SIP-MSG-002 | `MessageExpiredError` | medium | ✓ | 保留（过期现以 ValueError 上抛） |
@@ -618,15 +682,20 @@ prev_tag 初值 = header_tag；此后 prev_tag_{i} = chunk_tag_{i-1}
 ### 11.3 演进规则
 
 - **SIP-1.x（补丁演进）**：MAY 增加协议字典（握手/消息/rekey 的 JSON）内的**可选新字段**——
-  接收端按键取值、忽略未知键，天然后向兼容；MUST NOT 修改既有字段语义/编码/HMAC 输入串。
+  接收端按键取值、忽略未知键，天然向后兼容；MUST NOT 修改既有字段语义/编码/HMAC 输入串。
+  **先例（v1.1）**：套件字段 `suite` 即按此规则演进——ZH 显式携带、EN 不携带
+  （缺省=EN），旧 peer（无字段）与 EN 端点行为逐字节不变；协商式新增套件
+  （不改变既有套件行为、双方显式单选、无降级）属 1.x 演进，**整体替换默认算法仍属
+  SIP-2.0 级变更**。
 - **信封（SIP-TRANSPORT-x）**：反序列化 fail-closed（未知字段即 `TypeError` 拒绝），
   因此信封**永不做加字段的兼容演进**——需要新信封能力时升 major，新版本互相拒绝。
 - **SIP-2.0（不兼容演进）**：版本串变更；旧端点按 §11.2 拒绝。若未来引入协商，
   仅允许在 Hello 明文段声明支持集，且降级必须双方显式确认（SHOULD 同时签入 HMAC）。
 - **SIPFT**：魔数内嵌版本（`SIPFT1.0`）；`SIPFT2.0` 是新魔数=新格式，旧端点按魔数
   不符拒绝。头部 `format` 字段为头部 JSON 自身的次级版本闸。
-- 密码算法更换（如真 XChaCha20 或后量子 KEX）属 SIP-2.0 级变更（见设计稿
-  `docs/superpowers/specs/2026-04-22-post-quantum-kex-design.md`）。
+- 密码算法整体更换（如真 XChaCha20 或后量子 KEX 替换 EN 默认原语）属 SIP-2.0 级
+  变更（见设计稿 `docs/superpowers/specs/2026-04-22-post-quantum-kex-design.md`）；
+  经协商字段新增可选套件（v1.1 的 ZH）不属此类。
 
 ---
 
@@ -650,6 +719,14 @@ prev_tag 初值 = header_tag；此后 prev_tag_{i} = chunk_tag_{i-1}
 9. **内存**：Python 运行时下密钥擦除为尽力而为（bytes 不可变，D6）；
    `rekey.apply_new_keys` 仅擦除 bytearray 形态旧钥。
 10. **不在范围**：流量分析、元数据保护、后量子安全、密钥托管、拒绝服务（传输层职责）。
+11. **ZH 套件的实现级限制（v1.1，如实记述）**：
+    - `crypto/sm2.py` 纯 Python 非常量时间（侧信道暴露面高于 OpenSSL C 实现的
+      SM3/SM4-GCM）；对端公钥先做在曲线/非无穷远点校验（防无效曲线攻击），
+      私钥经 `os.urandom` 拒绝采样。威胁模型（攻击者不掌握 PSK/私钥、握手有
+      PSK 绑定 HMAC 兜底、会话有 AEAD 认证）下接受，ADR-001 决策 3。
+    - SM2 握手在纯 Python 下含约 6 次点乘（毫秒级），仅握手/Rekey 路径；
+      会话消息与文件工件走 C 实现的 SM4-GCM，吞吐与 EN 同级。
+    - 本实现不宣称商密合规认证（GM 认证体系外的通用分发库定位，ADR-001）。
 
 ---
 
@@ -668,13 +745,16 @@ prev_tag 初值 = header_tag；此后 prev_tag_{i} = chunk_tag_{i-1}
 | D6 | 旧密钥擦除仅 bytearray 有效 | bytes 不可变 | CPython 运行时固有 | 文档化（§12.9） |
 | D7 | 版本字段曾存在但无校验 | **已补齐**（本次 SPEC 工程）：握手双向 + rekey + 信封 + 既有工件魔数 | 单版本协议，拒绝即正确语义 | `feat/protocol-spec` 单独 commit，diff 见 CHANGELOG [Unreleased] |
 | D8 | 信封 `from_dict` 对未知字段 fail-closed（`TypeError` 未被 `parse_raw_message` 包装） | 演进约束已写入 §11.3 | 与 fail-closed 意图一致 | 记录在案 |
+| D9 | ZH 套件 SM2 密钥交换为**原始 ECDH**（共享秘密 = [d]P 的 x 坐标），非 GM/T 0003.3 完整密钥交换协议 | v1.1 引入；后者含显式确认流，与三重 DH 构造不兼容 | 身份绑定/认证性由 K1/K2 交叉 + PSK 混入 IKM 提供（与 EN 同构）；与 gmssl 独立实现交叉验证 | 如实记述（§3/§4.7/ADR-001） |
+| D10 | ZH 套件 AEAD 为 **SM4-GCM**，GB/T 体系内无单一强制 SM4-AEAD 标准 | v1.1 引入；RFC 8998（TLS_SM4_GCM_SM3）事实标准化 | GCM 构造本身为 NIST SP 800-38D 标准模式；nonce/tag 尺寸与 EN 同构 | 如实记述（§3/ADR-001）；若国标后续强制特定 AEAD 形态，属新套件演进 |
 
 ---
 
 ## 14. 一致性验证：规范章节 ↔ 测试交叉索引
 
 > 本节是规范的**可信度锚点**：SPEC 每条 wire 语义都必须有测试盯着。
-> 239 个既有用例 + 本次新增互操作/版本用例（`test_interop.py`、`test_version_validation.py`）。
+> v2.2.0 共 371 用例 = v2.1.0 的 283（EN 回归锚点）+ 国密 88
+> （`test_sm_crypto.py` 28 + `test_sm_suite.py` 32 + `test_interop_zh.py` 28）。
 > 交叉索引由 `tests/test_spec_index.py` 机器校验（断言本表引用的测试文件与用例名真实存在）。
 
 | 规范章节 | 测试文件 | 关键用例 |
@@ -706,12 +786,26 @@ prev_tag 初值 = header_tag；此后 prev_tag_{i} = chunk_tag_{i-1}
 | 三方/多轮会话 | `test_e2e_three_party.py` `test_transport.py::TestThreePartyCommunication` | MCP 三进程 E2E；6 用例三方握手/转发/独立通道 |
 | 互操作（第二实现） | `test_interop.py`（新增） | 测试向量回放 + 与主库活体对话（握手→消息→rekey 双向） |
 | 性能基线 | `test_performance.py` | `test_high_frequency_messages` `test_stress_test` |
+| §3 ZH 原语（SM2/SM3/SM4-GCM） | `test_sm_crypto.py`（v2.2 新增） | TestSM3（标准 KAT + gmssl 交叉验证）TestSM4GCM（`test_sm4_block_cipher_standard_kat` `test_roundtrip_with_aad` `test_tampered_ciphertext_rejected` `test_wrong_aad_rejected` `test_dispatch_via_aead_module`）TestSM2（`test_ecdh_symmetric` `test_public_key_derivation_matches_gmssl` `test_ecdh_matches_gmssl` `test_rejects_off_curve_point` `test_parse_public_key_length_guard` 等 8 用例）TestSuiteDispatch 与 TestSuiteNegotiationError |
+| §4 ZH 握手 | `test_sm_suite.py`（v2.2 新增） | TestZHHandshake（全 3 用例：双侧一致/wire 字段/时间戳） |
+| §4.5 套件协商（SIP-PROTO-005） | `test_sm_suite.py` `test_interop_zh.py`（v2.2 新增） | TestSuiteNegotiation（全 6 用例：双向不匹配/未知值/字段剥离/Auth 缺字段/EN 向后兼容）；TestNegativeInteropZH 协商用例 |
+| §5 ZH 密钥调度（16+32+32） | `test_sm_crypto.py` `test_interop_zh.py`（v2.2 新增） | TestSuiteDispatch::`test_triple_dh_key_lengths` `test_suites_produce_distinct_keys`；TestVectorReplayZH（参考实现独立复算 ZH 三元组） |
+| §6 ZH 会话消息（自描述 suite） | `test_sm_suite.py`（v2.2 新增） | TestZHMessaging（全 5 用例：往返/replay_tag 摘要/篡改/未知套件/计数器） |
+| §7 ZH Rekey | `test_sm_suite.py`（v2.2 新增） | TestZHRekey（全 4 用例：全流程/65B 公钥/篡改签名/跨套件拒绝） |
+| §2.3/§6 ZH 通道 | `test_sm_suite.py`（v2.2 新增） | TestZHChannel（全 6 用例：双向消息/重放/rekey/会话序列化/通道不匹配/非法套件） |
+| §9 ZH 工件（套件带外） | `test_sm_suite.py`（v2.2 新增） | TestZHFileTransfer（全 4 用例：往返/篡改/跨套件拒绝/EN 缺省不变） |
+| §10.2 MCP ZH（响应冻结） | `test_sm_suite.py`（v2.2 新增） | TestZHMCP::`test_full_tool_flow_structure_frozen`（四工具键集与 EN 逐项一致） |
+| §11.3 EN wire 不变（红线） | `test_sm_suite.py`（v2.2 新增） | TestENWireUnchanged（全 3 用例：握手/消息/会话序列化无 suite 字段） |
+| 互操作（ZH 第二实现） | `test_interop_zh.py`（v2.2 新增） | TestVectorReplayZH（向量回放双向断言）TestLiveInteropZH（活体对话/rekey/信封）TestNegativeInteropZH（篡改/协商失败/向量域隔离） |
 
 **向量与互操作验证链**：`scripts/interop/generate_vectors.py`（主库导出握手中间态/
-密钥/密文/tag 到 `tests/vectors/sip_test_vectors.json`）→ `scripts/interop/reference_impl.py`
-（仅依本规范实现，独立 HKDF/密钥调度/ HMAC transcript/AEAD 调用）→ `test_interop.py`
-双向断言。CI 每次运行重新生成向量并回放，另校验仓库内静态向量可被参考实现消费。
+密钥/密文/tag 到 `tests/vectors/sip_test_vectors.json`；`--suite zh` 导出国密向量到
+`sip_test_vectors_zh.json`）→ `scripts/interop/reference_impl.py`（仅依本规范实现：
+EN 独立 HKDF/密钥调度/HMAC transcript/AEAD 调用；ZH 额外独立实现 HMAC-SM3/
+HKDF-SM3/Jacobian 坐标 SM2 点乘）→ `test_interop.py` / `test_interop_zh.py`
+双向断言。CI 每次运行重新生成向量（EN/ZH）并回放，另校验仓库内静态向量可被
+参考实现消费。
 
 ---
 
-*End of SIP-1.0 SPEC v1.0*
+*End of SIP-1.0 SPEC v1.1*

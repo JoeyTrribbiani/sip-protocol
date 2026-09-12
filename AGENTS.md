@@ -1,32 +1,33 @@
 # AGENTS.md
 
-> SIP 加密库项目结构与模块职责速览（v2.0 encryption-only）
+> SIP 加密库项目结构与模块职责速览（v2.2.0 双套件：EN 国际 / ZH 国密）
 
 ## 目录结构
 
 ```
 sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，对齐 rf 家族分发库标准）
 ├── src/sip_protocol/
-│   ├── __init__.py                # 包入口，__version__ = 2.1.0
-│   ├── __main__.py                # MCP 入口（python -m sip_protocol）
+│   ├── __init__.py                # 包入口，__version__ = 2.2.0
+│   ├── __main__.py                # MCP 入口（python -m sip_protocol，--suite EN|ZH 可选）
 │   ├── exceptions.py              # 全局异常体系（分层异常 + 错误注册表）
-│   ├── crypto/                    # 加密原语层
-│   ├── protocol/                  # 协议层（握手/消息/Rekey）
+│   ├── crypto/                    # 加密原语层（EN: X25519/ChaCha/HKDF-SHA256 + ZH: SM2/SM3/SM4-GCM）
+│   ├── protocol/                  # 协议层（握手/消息/Rekey，套件协商贯通）
 │   ├── managers/                  # 会话与 nonce 管理
-│   ├── transport/                 # 加密通道与 MCP Server
-│   └── filetransfer/              # 加密文件工件（应用层，.sipft）
-├── tests/                         # pytest 测试（283 用例，含 interop/版本/规范索引校验）
-│   └── vectors/                   # 互操作测试向量（主库导出，参考实现消费）
-├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库）+ 向量生成
+│   ├── transport/                 # 加密通道与 MCP Server（suite 构造参数）
+│   └── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
+├── tests/                         # pytest 测试（371 用例：283 EN 回归 + 88 国密；含 interop 双套件/规范索引校验）
+│   └── vectors/                   # 互操作测试向量（EN + ZH 两份，主库导出，参考实现消费）
+├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库；EN+ZH 双套件）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
 ├── docs/
-│   ├── SPEC.md                    # SIP-1.0 线格式权威规范（含交叉索引 + 偏差登记 D1-D8）
+│   ├── SPEC.md                    # SIP-1.0 线格式权威规范（v1.1：双套件 + 交叉索引 + 偏差登记 D1-D10）
+│   ├── adr/001-sm-crypto-lib.md   # 国密原语选型决策记录（ADR-001）
 │   ├── architecture.md / e2ee-protocol.md（历史设计稿，被 SPEC 取代）/ 3 个设计稿
-├── pyproject.toml + uv.lock       # 打包与依赖锁定（根级）
+├── pyproject.toml + uv.lock       # 打包与依赖锁定（根级；cryptography>=42，gmssl 仅 dev 组）
 ├── CHANGELOG.md                   # 变更日志
 ├── CONTRIBUTING.md                # 贡献指南
 ├── SECURITY.md                    # 安全策略（披露入口/攻击面/支持版本）
-└── README.md                      # 项目简介（含治理节）
+└── README.md                      # 项目简介（含治理节 + 双套件算法表）
 ```
 
 ## 模块职责
@@ -37,15 +38,19 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 - _register_error 装饰器 + _ERROR_REGISTRY 错误注册表
 - **下游依赖：** 被所有模块引用，不依赖任何业务模块
 
-### `crypto/` — 加密原语层
+### `crypto/` — 加密原语层（双套件分派，接口签名不变，缺省 EN）
 | 文件 | 职责 |
 |------|------|
-| `xchacha20_poly1305.py` | XChaCha20-Poly1305 AEAD 加密/解密（主算法） |
-| `aes_gcm.py` | AES-256-GCM 加密/解密（备选算法） |
-| `dh.py` | X25519 ECDH 密钥交换 |
-| `hkdf.py` | HKDF-SHA256 密钥派生 |
-| `argon2.py` | Argon2id PSK 哈希 |
-- **依赖：** cryptography, argon2-cffi
+| `suite.py` | 套件常量（EN/ZH）/校验/digestmod 工厂/公钥与密钥长度表 |
+| `xchacha20_poly1305.py` | AEAD 分派：EN → ChaCha20-Poly1305（RFC 8439）；ZH → SM4-GCM（偏差 D1 模块双承载） |
+| `sm4_gcm.py` | SM4-GCM AEAD（RFC 8998 形态，偏差 D10；cryptography/OpenSSL C 实现） |
+| `aes_gcm.py` | AES-256-GCM 加密/解密（备选算法，无 wire 路径） |
+| `dh.py` | 密钥交换分派：EN → X25519（RFC 7748）；ZH → SM2；序列化/解析辅助（长度不符→SuiteNegotiationError） |
+| `sm2.py` | SM2 曲线运算（GM/T 0003.5，自研仿射点乘；原始 ECDH 取 x 坐标，偏差 D9；与 gmssl 交叉验证） |
+| `hkdf.py` | HKDF 分派：EN → HKDF-SHA256；ZH → HKDF-SM3（ZH 三元组 16+32+32） |
+| `sm3.py` | SM3 杂凑（GM/T 0004）+ hashlib 风格适配器（HMAC-SM3 经标准库 hmac） |
+| `argon2.py` | Argon2id PSK 哈希（**套件无关**，ADR-001 决策 5） |
+- **依赖：** cryptography(>=42，SM4-GCM 下限), argon2-cffi；gmssl 仅 dev 组（测试交叉验证，非运行时）
 - **被依赖：** protocol/
 
 ### `protocol/` — 协议层
@@ -103,9 +108,14 @@ transport/ ──→ protocol/ ──→ crypto/
 - **Pylint 10.00/10** — max-args=7，用 MessageOptions 绕过
 - **MCP 四工具行为冻结** — sip_handshake/sip_encrypt/sip_decrypt/sip_rekey 不得变更响应结构（黄金基线管控）
 - **规范优先（SPEC-first）** — wire 格式/密钥调度/错误语义变更必须先改 docs/SPEC.md 并同步
-  §14 交叉索引（tests/test_spec_index.py 机器校验）与互操作向量（scripts/interop/generate_vectors.py）；
-  规范↔代码偏差登记在 SPEC §13（D1-D8），如实记述不擅改
+  §14 交叉索引（tests/test_spec_index.py 机器校验）与互操作向量（scripts/interop/generate_vectors.py，
+  EN 与 --suite zh 两份）；规范↔代码偏差登记在 SPEC §13（D1-D10），如实记述不擅改
+- **双套件（v2.2）** — EN（缺省，行为逐位不变）/ ZH（国密 SM2/SM3/SM4-GCM，ADR-001）；
+  协商为单选无降级（SuiteNegotiationError SIP-PROTO-005，缺 suite 字段=EN 向后兼容）；
+  EN 的 wire/序列化不得携带 suite 字段（tests/test_sm_suite.py::TestENWireUnchanged 红线盯着）
 - **SIP = Secure Inter-agent Protocol** — 与 RFC 3261 (VoIP SIP) 无关；历史展开 "Secure Intelligence Protocol" 停用
-- **版本字段强制** — SIP-1.0 / SIP-TRANSPORT-1.0 / SIPFT1.0 三层版本不匹配一律拒绝（SPEC §11.2）
-- **MCP 入口** — `python3.11 -m sip_protocol --psk <key> --agent-id <id>`（openclaw.json 通路，改造不可破坏）
+- **版本字段强制** — SIP-1.0 / SIP-TRANSPORT-1.0 / SIPFT1.0 三层版本不匹配一律拒绝（SPEC §11.2）；
+  套件演进不改线协议版本（suite 是 §11.3 可选字段先例）
+- **MCP 入口** — `python3.11 -m sip_protocol --psk <key> --agent-id <id>`（openclaw.json 通路，改造不可破坏；
+  可选 `--suite ZH` 走国密，缺省 EN 不带该参数即历史行为）
 - **v2.0 已移除** — schema/discovery/group/decision/fragment/offline_queue/persistence/resume/version/各平台适配器/javascript（git 历史 ≤ v1.4.0 可回溯）；file_transfer 已于 v2.1 以 `filetransfer/` 按新架构重建
