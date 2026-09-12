@@ -7,32 +7,41 @@
 > SIP（Session Initiation Protocol，VoIP 会话发起协议）**无关**——无关联、无衍生、
 > 不共享任何语义或线格式。
 >
-> 协议是正式的：线格式权威规范见 **[docs/SPEC.md](./docs/SPEC.md)**（SPEC v1.0，
+> 协议是正式的：线格式权威规范见 **[docs/SPEC.md](./docs/SPEC.md)**（SPEC v1.1，
 > 字节级定义 + 规范↔测试交叉索引 + 独立参考实现互操作验证）。
 
 [![CI](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JoeyTrribbiani/sip-protocol/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/JoeyTrribbiani/sip-protocol/badge.svg)](https://codecov.io/gh/JoeyTrribbiani/sip-protocol)
 [![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![cryptography](https://img.shields.io/badge/cryptography-41%2B-blue.svg)](https://github.com/pyca/cryptography)
-[![AEAD](https://img.shields.io/badge/AEAD-ChaCha20--Poly1305-brightgreen.svg)](https://datatracker.ietf.org/doc/html/rfc8439)
+[![cryptography](https://img.shields.io/badge/cryptography-42%2B-blue.svg)](https://github.com/pyca/cryptography)
+[![AEAD](https://img.shields.io/badge/AEAD-ChaCha20--Poly1305%20%7C%20SM4--GCM-brightgreen.svg)](https://datatracker.ietf.org/doc/html/rfc8439)
 [![pytest](https://img.shields.io/badge/pytest-7.4%2B-brightgreen.svg)](https://docs.pytest.org/)
 [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
 ---
 
-## 算法清单
+## 算法清单（双套件）
 
-| 用途 | 算法 | 模块 |
-|------|------|------|
-| 对称加密（主） | ChaCha20-Poly1305 AEAD（RFC 8439，12 字节随机 nonce；模块名 `xchacha20_poly1305`，见 [SPEC D1](./docs/SPEC.md)） | `crypto/xchacha20_poly1305.py` |
-| 对称加密（备选） | AES-256-GCM AEAD（独立原语，无 wire 路径） | `crypto/aes_gcm.py` |
-| 密钥交换 | X25519 ECDH（三重 DH） | `crypto/dh.py` |
-| 密钥派生 | HKDF-SHA256 | `crypto/hkdf.py` |
-| PSK 哈希 | Argon2id | `crypto/argon2.py` |
-| 防重放 | Replay Tag（HMAC） + 消息计数器单调递增 + 时间戳窗 + Nonce FIFO（原语，见 SPEC §8/D3） | `managers/nonce.py` |
-| 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 | `protocol/handshake.py` `protocol/rekey.py` |
-| 加密文件 | SIPFT1.0：流式分块 AEAD + HKDF 块独立密钥 + tag 链防篡改重排 | `filetransfer/` |
+v2.2 起支持**密码套件协商**：`EN`（国际，缺省）与 `ZH`（国密 SM 系列，
+[ADR-001](./docs/adr/001-sm-crypto-lib.md)）。握手时经 Hello 的可选 `suite` 字段
+单选协商（不匹配即失败，无降级；缺字段=EN 向后兼容，旧 peer 逐字节不变）。
+ZH 套件实现不宣称商密合规认证，如实记述见 [SPEC §3/§13](./docs/SPEC.md)。
+
+| 用途 | EN（国际，缺省） | ZH（国密） | 模块 |
+|------|------------------|-----------|------|
+| 对称加密 | ChaCha20-Poly1305 AEAD（RFC 8439，12B nonce；模块名 `xchacha20_poly1305`，见 [SPEC D1](./docs/SPEC.md)） | **SM4-GCM**（RFC 8998 形态，16B 密钥；SPEC D10） | `crypto/xchacha20_poly1305.py` + `crypto/sm4_gcm.py` |
+| 对称加密（备选） | AES-256-GCM AEAD（独立原语，无 wire 路径） | — | `crypto/aes_gcm.py` |
+| 密钥交换 | X25519 ECDH（三重 DH） | **SM2** 原始 ECDH（GM/T 0003.5 曲线，公钥 65B；SPEC D9） | `crypto/dh.py` + `crypto/sm2.py` |
+| 密钥派生 | HKDF-SHA256 | **HKDF-SM3** | `crypto/hkdf.py` |
+| 认证标签 | HMAC-SHA256 | **HMAC-SM3** | `crypto/sm3.py` + `crypto/suite.py` |
+| PSK 哈希 | Argon2id（套件无关，SPEC §3） | 同左 | `crypto/argon2.py` |
+| 防重放 | Replay Tag（HMAC） + 消息计数器单调递增 + 时间戳窗 + Nonce FIFO（原语，见 SPEC §8/D3） | 同左（HMAC-SM3） | `managers/nonce.py` |
+| 前向保密 | Triple DH 握手 + Rekey 轮换闭环 + 旧密钥安全擦除 | 同左（SM2） | `protocol/handshake.py` `protocol/rekey.py` |
+| 加密文件 | SIPFT1.0：流式分块 AEAD + HKDF 块独立密钥 + tag 链防篡改重排 | 同构（SM4-GCM + HKDF-SM3；套件带外约定） | `filetransfer/` |
+
+SM3/SM4-GCM 走 cryptography（OpenSSL 3，C 实现）；SM2 曲线运算为本库自研纯 Python
+（与 gmssl 独立实现交叉验证）。运行时依赖不变：`cryptography>=42` 与 `argon2-cffi`。
 
 ## 安装
 
@@ -82,6 +91,19 @@ resp = mgr_b.process_rekey_request(req)
 new_keys_a = mgr_a.process_rekey_response(resp)
 mgr_a.apply_new_keys(new_keys_a)
 mgr_b.apply_new_keys(mgr_b.temp_new_keys)
+```
+
+### 国密套件（ZH：SM2/SM3/SM4-GCM）
+
+```python
+# 双端都指定 suite="ZH" 即走国密（SM2 三重 DH + HKDF-SM3 + SM4-GCM）。
+# 协商为单选：一端 ZH 一端 EN 会在握手处抛 SuiteNegotiationError（SIP-PROTO-005），
+# 无降级回退；旧版本 peer（不带 suite 字段）= EN，行为逐字节不变。
+channel_a = EncryptedChannel(agent_id="agent-a", psk=psk, suite="ZH")
+channel_b = EncryptedChannel(agent_id="agent-b", psk=psk, suite="ZH")
+# 之后与上例完全一致（initiate/respond/complete/send/receive/Rekey）
+
+# MCP 入口：python3.11 -m sip_protocol --psk <key> --agent-id <id> --suite ZH
 ```
 
 ### 协议层原语
@@ -200,7 +222,7 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路�
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 283 passed（含 26 互操作 + 3 规范索引校验） |
+| 测试用例 | 371 passed（含 26+28 互操作双套件 + 88 国密用例 + 3 规范索引校验） |
 | 覆盖率 | 89% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |

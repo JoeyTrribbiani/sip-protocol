@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sip-protocol"
-version = "2.1.0"
+version = "2.2.0"
 description = "SIP (Secure Inter-agent Protocol) - Agent间端到端加密通道库：三重DH握手/ChaCha20-Poly1305/Rekey前向保密/防重放（与RFC 3261 VoIP SIP无关）"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,7 +33,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "cryptography>=41.0.0",
+    # >=42.0.0：ZH 国密套件需要 SM4-GCM（SM3/SM4 自 35.0.0，GCM 模式 42.0.0 起）——ADR-001
+    "cryptography>=42.0.0",
     "argon2-cffi>=23.0.0",
 ]
 
@@ -48,6 +49,8 @@ dev = [
     "mypy>=1.5.0",
     "pip-audit>=2.6.0",
     "pre-commit>=3.4.0",
+    # 仅测试交叉验证用（SM2 点乘 / SM3 独立复算），不进运行时——ADR-001
+    "gmssl>=3.2.2",
 ]
 
 [project.urls]

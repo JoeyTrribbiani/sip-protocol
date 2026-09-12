@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增（国密套件 ZH：SM2/SM3/SM4-GCM，v2.2.0）
+
+- **密码套件协商（SPEC v1.1 §4.2/§4.5）** — Hello/Auth/会话消息加**可选** `suite`
+  字段（`ZH` 显式携带，`EN` 不携带——wire 逐字节不变；缺字段=EN，旧 peer 完全兼容）。
+  单选语义无降级回退：不匹配/未知值/公钥长度与套件不符 → `SuiteNegotiationError`
+  （**SIP-PROTO-005** 新错误码，双继承 ValueError，MCP 映射 -32005），
+  在任何密码学计算之前拒绝（含 suite 字段被剥离的降级攻击面）。
+- **crypto/ 国密原语层（ADR-001 选型：零新增运行时依赖）**
+  - `crypto/sm2.py`：GM/T 0003.5 推荐曲线自研点乘（仿射 double-and-add），
+    公钥 65B 非压缩；原始 ECDH 共享秘密取 x 坐标；在曲线/非无穷远点校验
+  - `crypto/sm3.py`：SM3（GM/T 0004，cryptography/OpenSSL C 实现）+ hashlib
+    风格适配器（HMAC-SM3 经标准库 hmac，RFC 2104）
+  - `crypto/sm4_gcm.py`：SM4-GCM（RFC 8998 事实标准化形态；GB/T 无单一强制
+    SM4-AEAD 标准，SPEC 偏差 D10 如实标注）；12B nonce/16B tag 与 EN wire 同构
+  - `crypto/suite.py`：套件常量/校验/digestmod 工厂
+  - `dh/hkdf/xchacha20_poly1305` 内部按 suite 分派（接口签名不变，缺省 EN
+    行为逐位不变）；ZH 密钥调度 16+32+32（SM4-128 + 两把 HMAC-SM3 密钥，SPEC §5）
+  - 依赖下限 cryptography 41→**42**（SM4-GCM 自 42.0.0）；`gmssl` 仅进 dev 组
+    作测试交叉验证（SM2 点乘/SM3 独立复算），非运行时依赖
+- **全栈贯通** — SessionState.suite（仅 ZH 写入序列化，EN 字节不变）/ RekeyManager
+  套件感知 / EncryptedChannel·SipMcpServer 构造参数 `suite`（缺省 EN）+ CLI
+  `--suite` / filetransfer pack·unpack `suite` 参数（套件带外约定，跨套件解包=
+  头部认证失败防 oracle）。**MCP 四工具响应结构冻结不变**（键集逐项断言测试）。
+- **SPEC v1.1** — §3 双套件原语表与如实记述（D9 SM2 原始 ECDH 形态/D10 SM4-GCM
+  标准化状态）、§4.2 suite 字段表、§4.5 套件协商错误路径、§5/§7.4/§9.3 双套件
+  密钥调度、§10.1 SIP-PROTO-005、§11.3 套件字段=1.x 可选字段演进先例、§12.11
+  ZH 实现级限制、§13 D9-D10、§14 交叉索引新增 13 行（283→371 用例）
+- **互操作第二实现 ZH 支持** — reference_impl.py 独立实现 HMAC-SM3（RFC 2104
+  手工构造）/ HKDF-SM3（RFC 5869 手工实现）/ SM2（Jacobian 坐标，与主库仿射
+  构成独立代码路径）；`generate_vectors.py --suite zh` 产出
+  `tests/vectors/sip_test_vectors_zh.json`（EN 向量文件不动）
+- **新增测试 88 用例**（283→**371 passed**）：`test_sm_crypto.py` 28（SM3/SM4 标准
+  KAT + gmssl 交叉验证 + SM2 负路径 + 分派语义）、`test_sm_suite.py` 32（ZH 全链路
+  + 协商负路径 + **EN wire 无 suite 字段红线回归**）、`test_interop_zh.py` 28
+  （向量回放双向断言 + 活体对话 + 负路径）
+- **ADR-001**（`docs/adr/001-sm-crypto-lib.md`）— gmssl/snowland-smx/openssl 三路线
+  实证评估：gmssl 无 SM4-GCM 且 ECB 带填充、纯 Python 性能与传递依赖 pycryptodomex；
+  最终混合路线（cryptography SM3/SM4-GCM + 自研 SM2 + gmssl dev 组交叉验证）
+
 ### 新增（协议化改造：让它成为名副其实的协议）
 
 - **`docs/SPEC.md` — SIP-1.0 线格式权威规范（SPEC v1.0，Experimental/Living）**

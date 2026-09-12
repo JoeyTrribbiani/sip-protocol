@@ -7,6 +7,8 @@ import base64
 import time
 
 PROTOCOL_VERSION = "SIP-1.0"
+# 密码套件（SPEC v1.1 §4.2）：缺省 EN；本模块保持无业务依赖，不 import crypto 层
+DEFAULT_SUITE = "EN"
 
 
 class SessionState:
@@ -27,6 +29,7 @@ class SessionState:
         self.salt = ""
         self.local_nonce = ""
         self.remote_nonce = ""
+        self.suite = DEFAULT_SUITE
         self.created_at = int(time.time() * 1000)
         self.last_activity_at = int(time.time() * 1000)
 
@@ -72,6 +75,9 @@ class SessionState:
             "created_at": self.created_at,
             "last_activity_at": self.last_activity_at,
         }
+        # suite 仅在非 EN 时写入——EN 会话的序列化字节与历史版本逐位一致
+        if self.suite != DEFAULT_SUITE:
+            state_dict["suite"] = self.suite
         json_str = json.dumps(state_dict)
         serialized = base64.b64encode(json_str.encode()).decode()
         return serialized
@@ -124,6 +130,7 @@ class SessionState:
         )
         state.local_nonce = state_dict["local_nonce"]
         state.remote_nonce = state_dict["remote_nonce"]
+        state.suite = state_dict.get("suite", DEFAULT_SUITE)
         state.created_at = state_dict["created_at"]
         state.last_activity_at = state_dict["last_activity_at"]
 

@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 
 from ..protocol.rekey import RekeyManager
 from .encrypted_channel import EncryptedChannel, ChannelConfig
+from ..crypto.suite import SUITE_EN, SUITE_ZH, validate_suite
 from .message import AgentMessage
 
 # ──────────────── JSON-RPC 2.0 ────────────────
@@ -182,7 +183,7 @@ class SipMcpServer:
     4. sip_rekey → 密钥轮换（可选）
     """
 
-    def __init__(self, psk: bytes, agent_id: str = "mcp-agent"):
+    def __init__(self, psk: bytes, agent_id: str = "mcp-agent", suite: str = SUITE_EN):
         self._channel = EncryptedChannel(
             agent_id=agent_id,
             psk=psk,
@@ -190,9 +191,11 @@ class SipMcpServer:
                 rekey_after_messages=10000,
                 rekey_after_seconds=3600,
             ),
+            suite=suite,
         )
         self._agent_id = agent_id
         self._psk = psk
+        self._suite = validate_suite(suite)
         self._initialized = False
 
         # Rekey状态
@@ -659,17 +662,17 @@ class SipMcpServer:
 # ──────────────── Stdio运行器 ────────────────
 
 
-def run_stdio_server(psk: bytes, agent_id: str = "mcp-agent") -> None:
+def run_stdio_server(psk: bytes, agent_id: str = "mcp-agent", suite: str = SUITE_EN) -> None:
     """
     以stdio模式运行MCP Server
 
     从stdin读取JSON-RPC请求，向stdout写出JSON-RPC响应。
     日志输出到stderr。
     """
-    server = SipMcpServer(psk=psk, agent_id=agent_id)
+    server = SipMcpServer(psk=psk, agent_id=agent_id, suite=suite)
 
     print(
-        f"SIP MCP Server started (agent_id={agent_id})",
+        f"SIP MCP Server started (agent_id={agent_id}, suite={suite})",
         file=sys.stderr,
     )
 
@@ -707,11 +710,18 @@ def main() -> None:
         default="mcp-agent",
         help="Agent ID（默认: mcp-agent）",
     )
+    parser.add_argument(
+        "--suite",
+        choices=[SUITE_EN, SUITE_ZH],
+        default=SUITE_EN,
+        help="密码套件（EN=国际默认；ZH=国密 SM2/SM3/SM4，对端须同为 ZH）",
+    )
     args = parser.parse_args()
 
     run_stdio_server(
         psk=args.psk.encode("utf-8"),
         agent_id=args.agent_id,
+        suite=args.suite,
     )
 
 

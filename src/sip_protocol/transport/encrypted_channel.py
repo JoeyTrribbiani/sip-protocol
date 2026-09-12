@@ -37,6 +37,7 @@ from ..protocol.message import (
 from ..protocol.rekey import RekeyManager
 from ..managers.session import SessionState
 from ..managers.nonce import NonceManager
+from ..crypto.suite import SUITE_EN, validate_suite
 
 from .message import (
     AgentMessage,
@@ -97,6 +98,7 @@ class EncryptedChannel:
         config: Optional[ChannelConfig] = None,
         identity_private_key=None,
         identity_public_key=None,
+        suite: str = SUITE_EN,
     ):
         """
         初始化加密通道
@@ -107,12 +109,14 @@ class EncryptedChannel:
             config: 通道配置
             identity_private_key: 身份私钥（可选，用于持久化）
             identity_public_key: 身份公钥（可选，用于持久化）
+            suite: 密码套件（EN=国际默认；ZH=国密——握手时与对端协商，不匹配即失败）
         """
         self.agent_id = agent_id
         self.psk = psk
         self.config = config or ChannelConfig()
         self.state = ChannelState.IDLE
         self.remote_agent_id: Optional[str] = None
+        self.suite = validate_suite(suite)
 
         # 密钥管理
         self._identity_private_key = identity_private_key
@@ -203,6 +207,7 @@ class EncryptedChannel:
                 psk=self.psk,
                 identity_private_key=self._identity_private_key,
                 identity_public_key=self._identity_public_key,
+                suite=self.suite,
             )
             self._handshake_state = agent_state
             self._identity_private_key = agent_state["identity_private_key"]
@@ -245,6 +250,7 @@ class EncryptedChannel:
                 psk=self.psk,
                 identity_private_key=self._identity_private_key,
                 identity_public_key=self._identity_public_key,
+                suite=self.suite,
             )
             self._handshake_state = agent_state
             self._identity_private_key = agent_state["identity_private_key"]
@@ -258,6 +264,7 @@ class EncryptedChannel:
             self._session_state.encryption_key = session_keys["encryption_key"]
             self._session_state.auth_key = session_keys["auth_key"]
             self._session_state.replay_key = session_keys["replay_key"]
+            self._session_state.suite = self.suite
 
             # 响应方在respond_handshake后已获得所有密钥，可以视为ESTABLISHED
             self._set_state(ChannelState.ESTABLISHED)
@@ -298,6 +305,7 @@ class EncryptedChannel:
             self._session_state.encryption_key = session_keys["encryption_key"]
             self._session_state.auth_key = session_keys["auth_key"]
             self._session_state.replay_key = session_keys["replay_key"]
+            self._session_state.suite = self.suite
             self.remote_agent_id = auth_msg.sender_id
 
             self._set_state(ChannelState.ESTABLISHED)
@@ -346,6 +354,7 @@ class EncryptedChannel:
             recipient_id=recipient,
             message_counter=self._send_counter,
             replay_key=self._session_keys["replay_key"],
+            suite=self.suite,
         )
 
         # 包装为AgentMessage
@@ -401,7 +410,7 @@ class EncryptedChannel:
         encrypted_payload = msg.payload
         message_counter = encrypted_payload.get("message_counter", 0)
 
-        # 验证replay_tag
+        # 验证replay_tag（套件随消息自描述：ZH 消息携带 suite 字段，缺省 EN）
         sender_id = encrypted_payload.get("sender_id", msg.sender_id)
         replay_tag = encrypted_payload.get("replay_tag")
         if replay_tag and self._session_keys:
@@ -410,6 +419,7 @@ class EncryptedChannel:
                 sender_id,
                 message_counter,
                 replay_tag,
+                suite=validate_suite(encrypted_payload.get("suite", SUITE_EN)),
             ):
                 raise ValueError("重放攻击检测：replay_tag验证失败")
 
@@ -485,6 +495,7 @@ class EncryptedChannel:
             "encryption_key": self._session_keys["encryption_key"],
             "auth_key": self._session_keys["auth_key"],
             "replay_key": self._session_keys["replay_key"],
+            "suite": self.suite,
         }
         manager = RekeyManager(session_state_dict, is_initiator=True)
         request = manager.create_rekey_request()
@@ -535,6 +546,7 @@ class EncryptedChannel:
             "encryption_key": self._session_keys["encryption_key"],
             "auth_key": self._session_keys["auth_key"],
             "replay_key": self._session_keys["replay_key"],
+            "suite": self.suite,
         }
         responder = RekeyManager(session_state_dict, is_initiator=False)
         response = responder.process_rekey_request(rekey_request)
