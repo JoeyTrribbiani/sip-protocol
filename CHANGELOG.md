@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-15
+
 ### 新增
 
 - **国密杂凑/派生互通 CLI（`sip-gmcvt`）**：`crypto/sm3` 与 `crypto/hkdf`

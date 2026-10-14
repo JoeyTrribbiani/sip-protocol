@@ -1,13 +1,13 @@
 # AGENTS.md
 
-> SIP 加密库项目结构与模块职责速览（v2.4.0 双套件：EN 国际 / ZH 国密）
+> SIP 加密库项目结构与模块职责速览（v2.5.0 双套件：EN 国际 / ZH 国密）
 
 ## 目录结构
 
 ```
 sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，对齐 rf 家族分发库标准）
 ├── src/sip_protocol/
-│   ├── __init__.py                # 包入口，__version__ = 2.4.0
+│   ├── __init__.py                # 包入口，__version__ = 2.5.0
 │   ├── __main__.py                # MCP 入口（python -m sip_protocol，--suite EN|ZH 可选）
 │   ├── exceptions.py              # 全局异常体系（分层异常 + 错误注册表）
 │   ├── crypto/                    # 加密原语层（EN: X25519/ChaCha/HKDF-SHA256 + ZH: SM2/SM3/SM4-GCM）
