@@ -1,13 +1,13 @@
 # AGENTS.md
 
-> SIP 加密库项目结构与模块职责速览（v2.3.0 双套件：EN 国际 / ZH 国密）
+> SIP 加密库项目结构与模块职责速览（v2.4.0 双套件：EN 国际 / ZH 国密）
 
 ## 目录结构
 
 ```
 sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，对齐 rf 家族分发库标准）
 ├── src/sip_protocol/
-│   ├── __init__.py                # 包入口，__version__ = 2.3.0
+│   ├── __init__.py                # 包入口，__version__ = 2.4.0
 │   ├── __main__.py                # MCP 入口（python -m sip_protocol，--suite EN|ZH 可选）
 │   ├── exceptions.py              # 全局异常体系（分层异常 + 错误注册表）
 │   ├── crypto/                    # 加密原语层（EN: X25519/ChaCha/HKDF-SHA256 + ZH: SM2/SM3/SM4-GCM）
@@ -16,7 +16,7 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 │   ├── transport/                 # 加密通道与 MCP Server（suite 构造参数）
 │   ├── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
 │   └── tools/                     # CLI 工具（应用层：sm2cvt SM2 密文互转/C3 校验，不涉线协议）
-├── tests/                         # pytest 测试（433 用例：283 EN 回归 + 88 国密套件 + 38 SM2 密文工具 + 24 sm2cvt CLI；含 interop 双套件/规范索引校验）
+├── tests/                         # pytest 测试（477 用例：283 EN 回归 + 88 国密套件 + 67 SM2 密文工具 + 39 sm2cvt CLI；含 interop 双套件/规范索引校验）
 │   └── vectors/                   # 互操作测试向量（EN + ZH 两份，主库导出，参考实现消费）
 ├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库；EN+ZH 双套件）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
@@ -48,7 +48,7 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 | `aes_gcm.py` | AES-256-GCM 加密/解密（备选算法，无 wire 路径） |
 | `dh.py` | 密钥交换分派：EN → X25519（RFC 7748）；ZH → SM2；序列化/解析辅助（长度不符→SuiteNegotiationError） |
 | `sm2.py` | SM2 曲线运算（GM/T 0003.5，自研仿射点乘；原始 ECDH 取 x 坐标，偏差 D9；与 gmssl 交叉验证） |
-| `sm2_ciphertext.py` | SM2 加密密文四格式互转 + C3 校验（外部系统互通工具，不涉 SIP 线协议；Sm2CiphertextFormatError SIP-CRYPTO-004） |
+| `sm2_ciphertext.py` | SM2 加密密文五格式互转（四裸格式 + ASN.1 DER，GM/T 0009 结构，变长 INTEGER 剥前导零/左补零对齐）+ C3 校验（外部系统互通工具，不涉 SIP 线协议；Sm2CiphertextFormatError SIP-CRYPTO-004） |
 | `hkdf.py` | HKDF 分派：EN → HKDF-SHA256；ZH → HKDF-SM3（ZH 三元组 16+32+32） |
 | `sm3.py` | SM3 杂凑（GM/T 0004）+ hashlib 风格适配器（HMAC-SM3 经标准库 hmac） |
 | `argon2.py` | Argon2id PSK 哈希（**套件无关**，ADR-001 决策 5） |
@@ -94,7 +94,7 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 ### `tools/` — 命令行工具（标准协议互通调试，应用层）
 | 文件 | 职责 |
 |------|------|
-| `sm2cvt.py` | SM2 密文互通 CLI：`sip-sm2cvt`（console script）或 `python -m sip_protocol.tools.sm2cvt`；子命令 detect/convert/verify，输入支持 hex 位置参数/`--file` hex 文本/stdin（容忍空白与 0x 前缀），stdout 恒机器友好（格式标识/转换 hex），退出码 0/1（verify 通过/失败）/2（输入错误） |
+| `sm2cvt.py` | SM2 密文互通 CLI：`sip-sm2cvt`（console script）或 `python -m sip_protocol.tools.sm2cvt`；子命令 detect/convert/verify，输入支持 hex 位置参数/`--file` 文本/stdin（容忍空白与 0x 前缀），`--b64` 切 base64 通道（base64/base64url 自动判别、容忍换行与省略 padding），convert `--out-b64` 输出 base64，stdout 恒机器友好（格式标识/转换 hex 或 base64），退出码 0/1（verify 通过/失败）/2（输入错误） |
 - **依赖：** crypto/（sm2, sm2_ciphertext）；不依赖 transport/protocol
 - **被依赖：** pyproject `[project.scripts]`；外部系统互通调试（GM/T 0003.5 工具范畴，不涉 SIP 线协议）
 

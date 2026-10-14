@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-14
+
 ### 新增
 
 - **SM2 密文互通 CLI（`sip-sm2cvt`）**：`crypto/sm2_ciphertext` 库能力的命令行
   入口——console script `sip-sm2cvt`（pyproject `[project.scripts]`）与
   `python -m sip_protocol.tools.sm2cvt` 共用 `main(argv)`。三子命令：
-  `detect` 启发式判别线格式、`convert --from/--to` 四格式无损互转（`--out`
+  `detect` 启发式判别线格式、`convert --from/--to` 五格式无损互转（`--out`
   可写文件）、`verify --fmt --privkey` 凭解密方私钥重算 C3（GM/T 0003.4/.5）
   收口静默错解。输入支持 hex 位置参数 / `--file` hex 文本文件 / stdin
   （容忍空白与 0x 前缀）；stdout 恒机器友好（格式标识 / 转换后 hex），
@@ -20,18 +22,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   与 argparse 同码）。配套 `SM2PrivateKey.exchange_point`（完整共享点
   x2‖y2，64 字节——C3 = Hash(x2‖M‖y2) 需要 y2，与原始 ECDH 仅取 x 坐标的
   `exchange` 是两个消费面；复用已验证点乘，零新增曲线运算）。
+- **ASN.1 DER 第五格式（`crypto/sm2_ciphertext`）**：GM/T 0009 规定的
+  结构化密文编码 `SEQUENCE { INTEGER C1x, INTEGER C1y, OCTET STRING C3,
+  OCTET STRING C2 }`（Java BouncyCastle 默认输出）。`convert`/`verify_c3`
+  增收 `DER` 格式标识；编码剥坐标前导零（最高位为 1 补 `0x00` 保正），
+  解析按 32 字节左补零还原并执行 DER 最小性校验（非最小 INTEGER/长形
+  长度、结构越界、多余元素一律拒收）；`detect_format` 对首字节 `0x30`
+  的密文做整结构解析判别（结构自证，误报可忽略），解析失败落回裸格式
+  启发式。测试内独立手搓 DER 编码器与常量已知答案向量交叉验证（gmssl
+  不支持 DER，不新增 dev 依赖）。
+- **CLI base64 通道（Java/JS 系互通行形态）**：三子命令输入加 `--b64`
+  标志——base64/base64url 字母表自动判别（`-_` 归一为 `+/`），容忍换行
+  空白与省略 padding，严格字母表校验（`validate=True`，杂字符拒收）；
+  误带 `0x` 前缀定向报错。`convert` 输出加 `--out-b64`（标准 base64 含
+  padding，与 `--out` 文件输出可叠加）。
 
 ### SPEC-first 判定
 
-- CLI 为纯互通调试工具（GM/T 0003.5 工具范畴，`sm2_ciphertext` 定位不变），
-  不定义不触碰 SIP-1.0 wire 格式/密钥调度/错误语义，`docs/SPEC.md`（v1.1）
-  无需更新；互操作向量（EN/ZH）不重新生成。
+- 本版无 SIP-1.0 wire 格式/密钥调度/错误语义变更，`docs/SPEC.md`（v1.1）
+  无需更新：DER 与 base64 均属 `sm2_ciphertext` 外部系统密文互通范畴
+  （工具层，SIP 中 SM2 仅用于 ECDH，SPEC 偏差 D9 已覆盖）；CLI 为纯互通
+  调试工具，定位不变；互操作向量（EN/ZH）无协议变更，不重新生成。
 
 ### 测试
 
-- 409 → **433 passed**（+24 sm2cvt CLI 冒烟：三子命令正负路径、文件与
-  stdin 输入、`python -m` 子进程通路、真实曲线点合成密文全链路 C3 复算、
-  gmssl 真实密文交叉冒烟）
+- 433 → **477 passed**（+29 SM2 密文工具：五格式 25 对全互转、手搓 DER
+  编码器与实现逐字节交叉、常量已知答案向量、高位/全零坐标 INTEGER
+  保符号与剥零还原、10 类畸形 DER 拒收、0x30 裸密文 detect 落回；
+  +15 sm2cvt CLI：DER 三子命令、base64/urlsafe/无 padding/多行输入、
+  `--out-b64` 与 `--out` 叠加、负路径退出码）
 
 ### 修复
 

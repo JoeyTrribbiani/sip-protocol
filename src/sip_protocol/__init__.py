@@ -6,4 +6,4 @@ Secure Inter-agent Protocol - Agent间端到端加密通道库（纯加密层）
 ZH（国密 SM2/SM4-GCM/HKDF-SM3），握手时经 suite 字段协商（SPEC v1.1）。
 """
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
