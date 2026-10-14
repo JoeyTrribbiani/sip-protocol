@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增
+
+- **SM2 密文互通 CLI（`sip-sm2cvt`）**：`crypto/sm2_ciphertext` 库能力的命令行
+  入口——console script `sip-sm2cvt`（pyproject `[project.scripts]`）与
+  `python -m sip_protocol.tools.sm2cvt` 共用 `main(argv)`。三子命令：
+  `detect` 启发式判别线格式、`convert --from/--to` 四格式无损互转（`--out`
+  可写文件）、`verify --fmt --privkey` 凭解密方私钥重算 C3（GM/T 0003.4/.5）
+  收口静默错解。输入支持 hex 位置参数 / `--file` hex 文本文件 / stdin
+  （容忍空白与 0x 前缀）；stdout 恒机器友好（格式标识 / 转换后 hex），
+  提示走 stderr；退出码 0 / 1（verify 通过 / 失败）/ 2（输入错误，
+  与 argparse 同码）。配套 `SM2PrivateKey.exchange_point`（完整共享点
+  x2‖y2，64 字节——C3 = Hash(x2‖M‖y2) 需要 y2，与原始 ECDH 仅取 x 坐标的
+  `exchange` 是两个消费面；复用已验证点乘，零新增曲线运算）。
+
+### SPEC-first 判定
+
+- CLI 为纯互通调试工具（GM/T 0003.5 工具范畴，`sm2_ciphertext` 定位不变），
+  不定义不触碰 SIP-1.0 wire 格式/密钥调度/错误语义，`docs/SPEC.md`（v1.1）
+  无需更新；互操作向量（EN/ZH）不重新生成。
+
+### 测试
+
+- 409 → **433 passed**（+24 sm2cvt CLI 冒烟：三子命令正负路径、文件与
+  stdin 输入、`python -m` 子进程通路、真实曲线点合成密文全链路 C3 复算、
+  gmssl 真实密文交叉冒烟）
+
 ### 修复
 
 - **Release 自动发版显式设置标题**：release job 此前只填 notes 不设标题

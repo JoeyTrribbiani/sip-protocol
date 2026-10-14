@@ -14,8 +14,9 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 │   ├── protocol/                  # 协议层（握手/消息/Rekey，套件协商贯通）
 │   ├── managers/                  # 会话与 nonce 管理
 │   ├── transport/                 # 加密通道与 MCP Server（suite 构造参数）
-│   └── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
-├── tests/                         # pytest 测试（409 用例：283 EN 回归 + 88 国密套件 + 38 SM2 密文工具；含 interop 双套件/规范索引校验）
+│   ├── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
+│   └── tools/                     # CLI 工具（应用层：sm2cvt SM2 密文互转/C3 校验，不涉线协议）
+├── tests/                         # pytest 测试（433 用例：283 EN 回归 + 88 国密套件 + 38 SM2 密文工具 + 24 sm2cvt CLI；含 interop 双套件/规范索引校验）
 │   └── vectors/                   # 互操作测试向量（EN + ZH 两份，主库导出，参考实现消费）
 ├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库；EN+ZH 双套件）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
@@ -90,10 +91,18 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 - **被依赖：** dsh 壳 encrypted_file_pack / encrypted_file_unpack
 - **背景：** v1.x file_transfer（明文落盘引用式）评估后按 dsh 公制重做，非原样恢复
 
+### `tools/` — 命令行工具（标准协议互通调试，应用层）
+| 文件 | 职责 |
+|------|------|
+| `sm2cvt.py` | SM2 密文互通 CLI：`sip-sm2cvt`（console script）或 `python -m sip_protocol.tools.sm2cvt`；子命令 detect/convert/verify，输入支持 hex 位置参数/`--file` hex 文本/stdin（容忍空白与 0x 前缀），stdout 恒机器友好（格式标识/转换 hex），退出码 0/1（verify 通过/失败）/2（输入错误） |
+- **依赖：** crypto/（sm2, sm2_ciphertext）；不依赖 transport/protocol
+- **被依赖：** pyproject `[project.scripts]`；外部系统互通调试（GM/T 0003.5 工具范畴，不涉 SIP 线协议）
+
 ## 模块依赖关系
 
 ```
 filetransfer/ ──→ crypto/            （应用层，仅复用原语）
+tools/ ──→ crypto/                   （应用层，仅复用原语）
 transport/ ──→ protocol/ ──→ crypto/
     │              │
     │              └──→ managers/

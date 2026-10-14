@@ -147,3 +147,19 @@ class SM2PrivateKey:
             raise ValueError("SM2 ECDH 得到无穷远点（对端公钥非法）")
         x_coord, _y_coord = shared
         return x_coord.to_bytes(_COORDINATE_LENGTH, "big")
+
+    def exchange_point(self, peer_public_key: SM2PublicKey) -> bytes:
+        """完整共享点 [d]P_peer = x2‖y2（64 字节大端）。
+
+        SM2 加密密文 C3 校验（GM/T 0003.5：C3 = Hash(x2‖M‖y2)）需要 y2，
+        与 exchange()（原始 ECDH 仅取 x 坐标，偏差 D9）是两个不同消费面。
+        """
+        if not isinstance(peer_public_key, SM2PublicKey):
+            raise ValueError("SM2 exchange_point 需要 SM2PublicKey 对端公钥")
+        shared = _scalar_mult(self._scalar, peer_public_key.point)
+        if shared is None:
+            raise ValueError("SM2 ECDH 得到无穷远点（对端公钥非法）")
+        x_coord, y_coord = shared
+        return x_coord.to_bytes(_COORDINATE_LENGTH, "big") + y_coord.to_bytes(
+            _COORDINATE_LENGTH, "big"
+        )
