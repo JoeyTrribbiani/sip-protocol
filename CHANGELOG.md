@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-14
+
 ### 新增
 
 - **SM2 密文互通工具（`crypto/sm2_ciphertext`）**：GM/T 0003.5 未规定密文串行
@@ -20,7 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   python-test + security-audit，既有触发条件零改动）——CI 全绿后自动
   创建 GitHub Release，notes 从 CHANGELOG 对应 tag 定版节提取
   （缺节/空节/tag 格式不符 CI 层红，不发空 notes；同名 Release 已存在
-  则跳过）。AGENTS.md 新增「CI 与发版」节（发版标准 5 条 + 触发链条）
+  则跳过）。AGENTS.md 新增「CI 与发版」节（发版标准 5 条 + 触发链条）。
+
+### SPEC-first 判定
+
+- 本版无 SIP-1.0 wire 格式/密钥调度/错误语义变更，`docs/SPEC.md`（v1.1）
+  无需更新：sm2_ciphertext 为外部系统密文互通工具，不定义不触碰线协议
+  （SIP 中 SM2 仅用于 ECDH，SPEC 偏差 D9 已覆盖）；发版自动化仅改 CI
+  workflow 与 AGENTS.md。
+
+### 测试
+
+- 371 → **409 passed**（+38 SM2 密文工具：四格式互转/C3 校验/gmssl 真实
+  密文交叉验证/负路径）；互操作向量（EN/ZH）无协议变更，不重新生成
 
 ---
 
