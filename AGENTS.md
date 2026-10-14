@@ -131,9 +131,10 @@ transport/ ──→ protocol/ ──→ crypto/
   3. SPEC-first 完整性：协议行为变更已同步 SPEC（含 §14 交叉索引）与
      互操作向量（EN + ZH 两份），发布说明引用 SPEC 版本号
   4. tag 格式 `vX.Y.Z`，打 tag 的 commit 必须是绿 CI 的 main HEAD
-  5. tag 推送后 CI 全绿 → release job 自动发 GitHub Release（notes 取
-     CHANGELOG 对应 tag 定版节）；若自动发布失败，手工补发路径：
-     `gh release create vX.Y.Z --notes-file <定版节内容文件>`
+  5. tag 推送后 CI 全绿 → release job 自动发 GitHub Release（标题取 tag 名
+     如 v2.3.0，notes 取 CHANGELOG 对应 tag 定版节）；若自动发布失败，
+     手工补发路径：`gh release create vX.Y.Z --title vX.Y.Z --notes-file
+     <定版节内容文件>`（--title 与自动行为一致）
 - 触发链条：push tag `v*` → CI（python-test + security-audit + release
   job）→ 全绿即 GitHub Release 就位。release job 防呆：tag 格式不符
   即红；CHANGELOG 无对应定版节/空节即红（不发空 notes）；同名 Release

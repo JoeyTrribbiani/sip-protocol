@@ -5,8 +5,9 @@ name: CI
 # 档位 A 打包验证（python-project-standard #7/#8）：wheel 文件清单核验
 # L6 性能为可选未启用（纯加密核心以 pytest 覆盖）
 # release job 仅 tag 触发（refs/tags/v*），needs 既有两 job：全绿后自动
-# 发 GitHub Release，notes 取 CHANGELOG 对应 tag 定版节；tag 格式不符/
-# 缺定版节/空节即红（防呆在 CI 层，不发空 notes）；同名 Release 已存在则跳过
+# 发 GitHub Release，标题取 tag 名（如 v2.3.0），notes 取 CHANGELOG 对应
+# tag 定版节；tag 格式不符/缺定版节/空节即红（防呆在 CI 层，不发空 notes）；
+# 同名 Release 已存在则跳过
 
 on:
   push:
@@ -150,7 +151,7 @@ jobs:
         print(f"notes 提取成功：[{ver}] 定版节 {body.count(chr(10)) + 1} 行")
         EOF
 
-    - name: 创建 GitHub Release（非 draft 非 prerelease；已存在则跳过）
+    - name: 创建 GitHub Release（标题=tag 名，非 draft 非 prerelease；已存在则跳过）
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -158,4 +159,4 @@ jobs:
           echo "Release ${GITHUB_REF_NAME} 已存在（可能手工补发过）——跳过创建"
           exit 0
         fi
-        gh release create "${GITHUB_REF_NAME}" --notes-file release-notes.md
+        gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md

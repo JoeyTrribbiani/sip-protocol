@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 修复
+
+- **Release 自动发版显式设置标题**：release job 此前只填 notes 不设标题
+  （标题字段为空，依赖 GitHub 对空标题的回退展示）——现 `gh release create`
+  显式 `--title` 取 tag 名（如 v2.3.0），标题行为确定；notes 仍取 CHANGELOG
+  定版节。AGENTS.md「CI 与发版」手工补发路径同步（`--title` 同款）。
+
 ## [2.3.0] - 2026-10-14
 
 ### 新增
