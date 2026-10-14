@@ -53,10 +53,11 @@ dev = [
     "gmssl>=3.2.2",
 ]
 
-# SM2 密文互通 CLI（GM/T 0003.5 工具范畴，不涉 SIP 线协议）——
-# 亦可 python -m sip_protocol.tools.sm2cvt，二者共用 main(argv) 入口
+# 国密互通调试 CLI（标准协议工具范畴，不涉 SIP 线协议）——
+# 亦可 python -m sip_protocol.tools.<mod>，二者共用 main(argv) 入口
 [project.scripts]
-sip-sm2cvt = "sip_protocol.tools.sm2cvt:main"
+sip-sm2cvt = "sip_protocol.tools.sm2cvt:main"  # SM2 密文互转/C3 校验（GM/T 0003.5）
+sip-gmcvt = "sip_protocol.tools.gmcvt:main"  # SM3/HMAC-SM3/HKDF-SM3 互通计算（GM/T 0004 + RFC 5869）
 
 [project.urls]
 Homepage = "https://github.com/JoeyTrribbiani/sip-protocol"

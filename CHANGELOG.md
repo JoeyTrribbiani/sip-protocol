@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增
+
+- **国密杂凑/派生互通 CLI（`sip-gmcvt`）**：`crypto/sm3` 与 `crypto/hkdf`
+  ZH 路径的命令行入口——console script `sip-gmcvt`（pyproject
+  `[project.scripts]`）与 `python -m sip_protocol.tools.gmcvt` 共用
+  `main(argv)`。三子命令：`sm3`（GM/T 0004 杂凑）、`hmac-sm3 --key`
+  （RFC 2104 构造，密钥 hex 任意长度）、`hkdf-sm3 --salt --info --len`
+  （RFC 5869 构造、SM3 作 PRF，直接复用 `crypto/hkdf.py` 的 ZH 分派——
+  与线协议密钥调度同一实现）。输入通道沿用 sm2cvt 管道形态（位置参数 →
+  `--file` → stdin），但缺省语义为文本（UTF-8 字节，与密文工具缺省 hex
+  相反——杂凑/派生的日常输入是文本）；`--hex`/`--b64`（互斥）切换编码
+  通道；文本通道剥单个尾随换行（echo/编辑器友好），空输入视为空消息
+  （合法且有标准摘要）；hkdf 缺省盐/info 为空字节串（经 HMAC 零填充语义
+  与 RFC 5869 全零盐逐字节等价，测试独立佐证），`--len` 缺省 32、上界
+  255×32=8160。stdout 恒机器友好（digest/MAC/OKM hex），退出码 0/2。
+  命名与 `sip-sm2cvt` 家族化：sm2cvt 专注 SM2 密文互转（2.4.0 定版语义
+  零扰动），gmcvt 承载国密杂凑/派生互通计算。
+
+### SPEC-first 判定
+
+- 本变更无 SIP-1.0 wire 格式/密钥调度/错误语义变更，`docs/SPEC.md`
+  （v1.1）无需更新：CLI 属外部系统互通调试工具层（GM/T 0004 / RFC 5869
+  标准范畴），hkdf-sm3 只是既有 `hkdf()` ZH 路径的命令行消费面（SPEC §5
+  密钥调度未动）；互操作向量（EN/ZH）无协议变更，不重新生成。
+
+### 测试
+
+- 477 → **515 passed**（+38 gmcvt CLI：GB/T 32905 附录 A 参考向量
+  （"abc"/512 比特消息/空消息）、HMAC-SM3 与 stdlib `hmac.new` 构造及
+  超块长密钥路径等价、HKDF-SM3 与 RFC 5869 手工 extract+expand 独立
+  复算一致（含缺省空盐=全零盐等价、`--len` 上界 8160 恰满块）、输入
+  通道正负路径（`--hex`/`--b64` 互斥、`--file`/stdin、尾换行剥除、
+  退出码 2、`python -m` 子进程与管道冒烟））
+
 ## [2.4.0] - 2026-10-14
 
 ### 新增

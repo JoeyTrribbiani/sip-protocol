@@ -15,8 +15,8 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 │   ├── managers/                  # 会话与 nonce 管理
 │   ├── transport/                 # 加密通道与 MCP Server（suite 构造参数）
 │   ├── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
-│   └── tools/                     # CLI 工具（应用层：sm2cvt SM2 密文互转/C3 校验，不涉线协议）
-├── tests/                         # pytest 测试（477 用例：283 EN 回归 + 88 国密套件 + 67 SM2 密文工具 + 39 sm2cvt CLI；含 interop 双套件/规范索引校验）
+│   └── tools/                     # CLI 工具（应用层：sm2cvt SM2 密文互转/C3 校验 + gmcvt SM3/HMAC-SM3/HKDF-SM3 互通计算，不涉线协议）
+├── tests/                         # pytest 测试（515 用例：283 EN 回归 + 88 国密套件 + 67 SM2 密文工具 + 39 sm2cvt CLI + 38 gmcvt CLI；含 interop 双套件/规范索引校验）
 │   └── vectors/                   # 互操作测试向量（EN + ZH 两份，主库导出，参考实现消费）
 ├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库；EN+ZH 双套件）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
@@ -95,8 +95,9 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 | 文件 | 职责 |
 |------|------|
 | `sm2cvt.py` | SM2 密文互通 CLI：`sip-sm2cvt`（console script）或 `python -m sip_protocol.tools.sm2cvt`；子命令 detect/convert/verify，输入支持 hex 位置参数/`--file` 文本/stdin（容忍空白与 0x 前缀），`--b64` 切 base64 通道（base64/base64url 自动判别、容忍换行与省略 padding），convert `--out-b64` 输出 base64，stdout 恒机器友好（格式标识/转换 hex 或 base64），退出码 0/1（verify 通过/失败）/2（输入错误） |
-- **依赖：** crypto/（sm2, sm2_ciphertext）；不依赖 transport/protocol
-- **被依赖：** pyproject `[project.scripts]`；外部系统互通调试（GM/T 0003.5 工具范畴，不涉 SIP 线协议）
+| `gmcvt.py` | 国密杂凑/派生互通 CLI：`sip-gmcvt`（console script）或 `python -m sip_protocol.tools.gmcvt`；子命令 sm3（GM/T 0004 杂凑）/hmac-sm3（`--key` hex，RFC 2104）/hkdf-sm3（`--salt --info --len`，RFC 5869、SM3 作 PRF，复用 crypto/hkdf ZH 路径）；输入缺省文本（UTF-8 字节，剥单个尾换行，空输入=空消息），`--hex`/`--b64`（互斥）切编码通道，另支持 `--file`/stdin；hkdf 缺省盐/info 空（RFC 5869 全零盐等价）、`--len` 缺省 32 上界 8160；stdout 恒机器友好（digest/MAC/OKM hex），退出码 0/2 |
+- **依赖：** crypto/（sm2, sm2_ciphertext, sm3, hkdf, suite）；不依赖 transport/protocol
+- **被依赖：** pyproject `[project.scripts]`；外部系统互通调试（GM/T 0003.5 / GM/T 0004 / RFC 5869 工具范畴，不涉 SIP 线协议）
 
 ## 模块依赖关系
 
