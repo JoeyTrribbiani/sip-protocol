@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 371 → **409 passed**（+38 SM2 密文工具：四格式互转/C3 校验/gmssl 真实
   密文交叉验证/负路径）；互操作向量（EN/ZH）无协议变更，不重新生成
 
+### 修复
+
+- **CI 发版链路两处红**（v2.3.0 tag 首跑暴露，本地 409 全绿不覆盖 CI 侧）：
+  wheel 清单断言漏加 `sm2_ciphertext.py` 且计数未同步 28→29（断言补齐）；
+  uv.lock dev 传递依赖 urllib3 2.7.0→2.8.0、virtualenv 21.2.4→21.14.5
+  （pip-audit 11 个 PYSEC 全消，本地同款命令复验 0 漏洞）
+
 ---
 
 ## [2.2.0] - 2026-09-12
