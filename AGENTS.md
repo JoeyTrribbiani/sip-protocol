@@ -15,7 +15,7 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 │   ├── managers/                  # 会话与 nonce 管理
 │   ├── transport/                 # 加密通道与 MCP Server（suite 构造参数）
 │   └── filetransfer/              # 加密文件工件（应用层，.sipft，套件带外约定）
-├── tests/                         # pytest 测试（371 用例：283 EN 回归 + 88 国密；含 interop 双套件/规范索引校验）
+├── tests/                         # pytest 测试（409 用例：283 EN 回归 + 88 国密套件 + 38 SM2 密文工具；含 interop 双套件/规范索引校验）
 │   └── vectors/                   # 互操作测试向量（EN + ZH 两份，主库导出，参考实现消费）
 ├── scripts/interop/               # 独立参考实现（仅依 SPEC，零 import 主库；EN+ZH 双套件）+ 向量生成
 ├── lib/index.mjs + package.json   # dsh 壳插件（dsh-sip-protocol，根级并存）
@@ -47,6 +47,7 @@ sip-protocol/                     # 根级单包布局（2026-09-11 扁平化，
 | `aes_gcm.py` | AES-256-GCM 加密/解密（备选算法，无 wire 路径） |
 | `dh.py` | 密钥交换分派：EN → X25519（RFC 7748）；ZH → SM2；序列化/解析辅助（长度不符→SuiteNegotiationError） |
 | `sm2.py` | SM2 曲线运算（GM/T 0003.5，自研仿射点乘；原始 ECDH 取 x 坐标，偏差 D9；与 gmssl 交叉验证） |
+| `sm2_ciphertext.py` | SM2 加密密文四格式互转 + C3 校验（外部系统互通工具，不涉 SIP 线协议；Sm2CiphertextFormatError SIP-CRYPTO-004） |
 | `hkdf.py` | HKDF 分派：EN → HKDF-SHA256；ZH → HKDF-SM3（ZH 三元组 16+32+32） |
 | `sm3.py` | SM3 杂凑（GM/T 0004）+ hashlib 风格适配器（HMAC-SM3 经标准库 hmac） |
 | `argon2.py` | Argon2id PSK 哈希（**套件无关**，ADR-001 决策 5） |

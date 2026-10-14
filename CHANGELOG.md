@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 新增
 
+- **SM2 密文互通工具（`crypto/sm2_ciphertext`）**：GM/T 0003.5 未规定密文串行
+  顺序，工程实现存在 C1C2C3/C1C3C2（含叠加 0x04 前缀）共四种 wire 格式。
+  新增 `detect_format` 启发式判别、`convert` 四格式无损互转、`verify_c3`
+  完整性校验（`derive(c1)` 返回 64 字节共享点 x2‖y2，KDF 按 GM/T 0003.4、
+  C3 按 GM/T 0003.5 x2‖M‖y2 由模块重算，收口 gmssl 等实现 decrypt 不校验
+  C3 的静默错解）。新异常 `Sm2CiphertextFormatError`（SIP-CRYPTO-004）；
+  gmssl 真实密文交叉验证（点乘/KDF/C3 顺序/互转双向互认）。
 - **发版自动化**：CI 加 release job（仅 tag 触发，`needs` 既有
   python-test + security-audit，既有触发条件零改动）——CI 全绿后自动
   创建 GitHub Release，notes 从 CHANGELOG 对应 tag 定版节提取

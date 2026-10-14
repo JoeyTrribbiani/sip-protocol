@@ -134,6 +134,20 @@ class KeyDerivationError(CryptoError):
         super().__init__(message=message, **kwargs)
 
 
+@_register_error
+@dataclass
+class Sm2CiphertextFormatError(CryptoError):
+    """SM2 加密密文线格式非法或与声明不符
+
+    crypto/sm2_ciphertext 互转与 C3 校验工具层使用（外部系统密文的
+    工程互通，不涉 SIP-1.0 线协议自身）。
+    """
+
+    def __init__(self, message: str = "SM2 密文线格式非法", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-CRYPTO-004")
+        super().__init__(message=message, **kwargs)
+
+
 # ==================== 协议层异常 ====================
 
 

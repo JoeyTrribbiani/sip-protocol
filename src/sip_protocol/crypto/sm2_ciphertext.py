@@ -14,8 +14,9 @@ GM/T 0003.5 只定义了密文各分量（C1 椭圆曲线点 / C2 密文 / C3 �
 静默返回垃圾明文而非报错。本模块提供：
 
 - :func:`detect_format` —— 长度与首字节启发式判别；
-- :func:`convert` —— 三种格式间无损互转；
-- :func:`verify_c3` —— 以 KDF 派生密钥流重算 C3，收口静默错解。
+- :func:`convert` —— 四种格式间无损互转；
+- :func:`verify_c3` —— 由共享点重算 KDF 密钥流与 C3（GM/T 0003.4/.5），
+  收口静默错解。
 
 约定
 -----
@@ -26,9 +27,9 @@ GM/T 0003.5 只定义了密文各分量（C1 椭圆曲线点 / C2 密文 / C3 �
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable
 
-from ..exceptions import CryptoError
+from ..exceptions import Sm2CiphertextFormatError
 from .sm3 import sm3_hash
 
 __all__ = [
@@ -52,16 +53,12 @@ C3_LEN = 32  #: C3 = SM3(x2‖M‖y2) 杂凑
 
 # --- 线格式标识 -----------------------------------------------------------
 
-FMT_C1C2C3 = "C1C2C3"        #: 旧序，无前缀
-FMT_C1C3C2 = "C1C3C2"        #: 新序（GM/T 0009），无前缀
+FMT_C1C2C3 = "C1C2C3"  #: 旧序，无前缀
+FMT_C1C3C2 = "C1C3C2"  #: 新序（GM/T 0009），无前缀
 FMT_C1C2C3_04 = "C1C2C3+04"  #: 旧序，0x04 未压缩点前缀
 FMT_C1C3C2_04 = "C1C3C2+04"  #: 新序，0x04 未压缩点前缀
 
 KNOWN_FORMATS = (FMT_C1C2C3, FMT_C1C3C2, FMT_C1C2C3_04, FMT_C1C3C2_04)
-
-
-class Sm2CiphertextFormatError(CryptoError):
-    """SM2 密文线格式非法或与声明不符。"""
 
 
 # --- 内部工具 -------------------------------------------------------------
@@ -70,13 +67,11 @@ class Sm2CiphertextFormatError(CryptoError):
 def _split_raw(ct: bytes, c3_first: bool) -> tuple[bytes, bytes, bytes]:
     """按（无前缀）总长切出 C1 / C2 / C3 三段。"""
     if len(ct) < C1_LEN + C3_LEN + 1:
-        raise Sm2CiphertextFormatError(
-            f"密文过短：{len(ct)} 字节（最少 {C1_LEN + C3_LEN + 1}）"
-        )
+        raise Sm2CiphertextFormatError(f"密文过短：{len(ct)} 字节（最少 {C1_LEN + C3_LEN + 1}）")
     c1 = ct[:C1_LEN]
     if c3_first:
-        c3 = ct[C1_LEN:C1_LEN + C3_LEN]
-        c2 = ct[C1_LEN + C3_LEN:]
+        c3 = ct[C1_LEN : C1_LEN + C3_LEN]
+        c2 = ct[C1_LEN + C3_LEN :]
     else:
         c2 = ct[C1_LEN:-C3_LEN]
         c3 = ct[-C3_LEN:]
@@ -97,6 +92,16 @@ def _strip_prefix(ct: bytes, fmt: str) -> tuple[bytes, str]:
 def _c1c2c3_to_bytes(c1: bytes, c2: bytes, c3: bytes, c3_first: bool) -> bytes:
     """按目标顺序拼接，C3 在前为新序。"""
     return c1 + (c3 + c2 if c3_first else c2 + c3)
+
+
+def _kdf(z: bytes, klen: int) -> bytes:
+    """GM/T 0003.4 密钥派生函数（SM3 计数器模式）：SM3(z ‖ ct) 级联截断到 klen。"""
+    out = bytearray()
+    ct = 1
+    while len(out) < klen:
+        out += sm3_hash(z + ct.to_bytes(4, "big"))
+        ct += 1
+    return bytes(out[:klen])
 
 
 # --- 公开接口 -------------------------------------------------------------
@@ -132,9 +137,7 @@ def detect_format(ct: bytes) -> str:
         return FMT_C1C2C3_04
     if len(ct) >= min_len:
         return FMT_C1C2C3
-    raise Sm2CiphertextFormatError(
-        f"密文长度 {len(ct)} 不满足任何合法格式（最小 {min_len}）"
-    )
+    raise Sm2CiphertextFormatError(f"密文长度 {len(ct)} 不满足任何合法格式（最小 {min_len}）")
 
 
 def convert(ct: bytes, from_fmt: str, to_fmt: str) -> bytes:
@@ -157,7 +160,7 @@ def convert(ct: bytes, from_fmt: str, to_fmt: str) -> bytes:
             f"格式标识必须属于 {KNOWN_FORMATS}，收到 from={from_fmt!r} to={to_fmt!r}"
         )
     raw, base = _strip_prefix(ct, from_fmt)
-    c1, c2, c3 = _split_raw(raw, c3_first=(base == FMT_C1C3C2))
+    c1, c2, c3 = _split_raw(raw, c3_first=base == FMT_C1C3C2)
     out = _c1c2c3_to_bytes(c1, c2, c3, c3_first=to_fmt.startswith(FMT_C1C3C2))
     if to_fmt.endswith("+04"):
         return b"\x04" + out
@@ -183,8 +186,9 @@ def verify_c3(
     fmt:
         声明的线格式（KNOWN_FORMATS 之一）。
     derive:
-        密钥流派生函数 ``derive(c1) -> keystream(len(c2))``，
-        即以 C1 点坐标经 KDF 得到与 C2 等长的异或流。
+        共享点派生函数 ``derive(c1) -> x2‖y2``（64 字节）——即以私钥
+        对 C1 做标量乘得到的椭圆曲线共享点坐标（[d]C1 = [k]PB）。
+        KDF 密钥流与 C3 均由本函数按标准重算，调用方无需关心。
     hasher:
         C3 杂凑函数，缺省 :func:`sip_protocol.crypto.sm3.sm3_hash`。
 
@@ -195,23 +199,25 @@ def verify_c3(
     异常
     ----
     Sm2CiphertextFormatError
-        格式/长度非法、或派生密钥流不足以覆盖 C2。
+        格式/长度非法、或 derive 返回的共享点长度不是 64 字节。
     ValueError
         derive 未提供。
     """
     if derive is None:
-        raise ValueError("必须提供 derive（密钥流派生函数）")
+        raise ValueError("必须提供 derive（共享点派生函数）")
 
     raw, base = _strip_prefix(ct, fmt)
-    c1, c2, c3 = _split_raw(raw, c3_first=(base == FMT_C1C3C2))
+    c1, c2, c3 = _split_raw(raw, c3_first=base == FMT_C1C3C2)
 
-    # C3 = Hash(x2 ‖ M ‖ y2)；此处 M = c2 XOR keystream 还原明文
-    keystream = derive(c1)
-    if len(keystream) < len(c2):
+    shared = derive(c1)
+    if len(shared) != C1_LEN:
         raise Sm2CiphertextFormatError(
-            f"派生密钥流 {len(keystream)} 字节不足以覆盖 C2 {len(c2)} 字节"
+            f"derive 返回 {len(shared)} 字节（期望 {C1_LEN} 字节共享点 x2‖y2）"
         )
+    # C2 = M ⊕ KDF(x2‖y2, klen)（GM/T 0003.4）；M = c2 XOR keystream 还原明文
+    keystream = _kdf(shared, len(c2))
     msg = bytes(a ^ b for a, b in zip(c2, keystream))
-    # x2‖y2 即 c1 本身（c1 = x‖y 各 32 字节）
-    expect = hasher(c1 + msg)
+    # C3 = Hash(x2 ‖ M ‖ y2)（GM/T 0003.5，消息居中；x2‖y2 是共享点，不是 C1）
+    half = C1_LEN // 2
+    expect = hasher(shared[:half] + msg + shared[half:])
     return expect == c3
