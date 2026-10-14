@@ -79,8 +79,9 @@ jobs:
         assert "sip_protocol/crypto/suite.py" in names, "缺套件分派 suite"
         assert "sip_protocol/tools/__init__.py" in names, "缺 tools 包根 __init__"
         assert "sip_protocol/tools/sm2cvt.py" in names, "缺 SM2 密文 CLI sm2cvt"
-        assert any(n.endswith("entry_points.txt") for n in names), "缺 console script 入口（sip-sm2cvt）"
-        assert len(py) == 31, f"py 文件数目异常: {len(py)}（预期 31）"
+        assert "sip_protocol/tools/gmcvt.py" in names, "缺国密杂凑/派生 CLI gmcvt"
+        assert any(n.endswith("entry_points.txt") for n in names), "缺 console script 入口（sip-sm2cvt / sip-gmcvt）"
+        assert len(py) == 32, f"py 文件数目异常: {len(py)}（预期 32）"
         assert not any(n.startswith("tests/") for n in names), "wheel 混入测试"
         print(f"wheel 清单核验通过: {len(names)} 个文件, {len(py)} 个 .py")
         EOF

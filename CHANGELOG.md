@@ -43,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   通道正负路径（`--hex`/`--b64` 互斥、`--file`/stdin、尾换行剥除、
   退出码 2、`python -m` 子进程与管道冒烟））
 
+### 修复
+
+- **CI wheel 清单断言随 gmcvt 补齐**：18b7cfe 新增 `tools/gmcvt.py`
+  （wheel 内 .py 31 → 32）但清单核验未同步——`Build & verify wheel
+  contents` 步骤补 `sip_protocol/tools/gmcvt.py` 存在性断言与
+  console script 入口注释（sip-sm2cvt / sip-gmcvt），py 文件数目断言
+  31 → 32。该步在 gmcvt 合入 main 的首轮 CI 即红（此前 18b7cfe 为
+  本地提交未过 CI），本地 `uv build` + 同款清单核验复现实锤后修复。
+
 ## [2.4.0] - 2026-10-14
 
 ### 新增
