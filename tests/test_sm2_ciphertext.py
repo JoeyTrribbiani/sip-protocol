@@ -1,4 +1,4 @@
-"""sm2_ciphertext 模块测试：四格式互转 + C3 校验 + 畸形输入 + gmssl 真实向量交叉验证。"""
+"""sm2_ciphertext 模块测试：五格式互转（含 ASN.1 DER）+ C3 校验 + 畸形输入 + gmssl 真实向量交叉验证。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from sip_protocol.crypto.sm2_ciphertext import (
     FMT_C1C2C3_04,
     FMT_C1C3C2,
     FMT_C1C3C2_04,
+    FMT_DER,
     KNOWN_FORMATS,
     Sm2CiphertextFormatError,
     convert,
@@ -42,6 +43,42 @@ CT_C1C2C3 = C1 + C2 + C3
 CT_C1C3C2 = C1 + C3 + C2
 CT_C1C2C3_04 = b"\x04" + CT_C1C2C3
 CT_C1C3C2_04 = b"\x04" + CT_C1C3C2
+
+
+# --- 测试内独立手搓 DER 编码（零复用实现，交叉验证基准） -----------------------
+
+
+def _local_tlv(tag: int, value: bytes) -> bytes:
+    assert len(value) < 0x80  # 本仓向量均短形长度内
+    return bytes([tag, len(value)]) + value
+
+
+def _local_integer(v: bytes) -> bytes:
+    """最小 INTEGER：剥前导零，最高位为 1 补 0x00 保正。"""
+    m = v.lstrip(b"\x00") or b"\x00"
+    if m[0] & 0x80:
+        m = b"\x00" + m
+    return _local_tlv(0x02, m)
+
+
+def _local_der(c1: bytes, c2: bytes, c3: bytes) -> bytes:
+    """GM/T 0009 ASN.1 密文 SEQUENCE{x, y, C3, C2} 手搓编码。"""
+    return _local_tlv(0x30, _local_integer(c1[:32]) + _local_integer(c1[32:]) +
+                      _local_tlv(0x04, c3) + _local_tlv(0x04, c2))
+
+
+CT_DER = _local_der(C1, C2, C3)
+# 手搓已知答案向量（常量字节，独立于两套编码器）：INTEGER 1/2 → 坐标左补零 31 字节
+DER_KNOWN = bytes.fromhex("302c" + "020101" + "020102" + "0420" + "33" * 32 + "0402abcd")
+CT_FROM_KNOWN = (
+    (b"\x00" * 31 + b"\x01") + (b"\x00" * 31 + b"\x02") + b"\xab\xcd" + b"\x33" * 32
+)
+# 畸形 DER 构造零件（基于手搓编码器的合法零件拼装）
+_BODY_X = _local_integer(C1[:32])
+_BODY_Y = _local_integer(C1[32:])
+_BODY_C3 = _local_tlv(0x04, C3)
+_BODY_C2 = _local_tlv(0x04, C2)
+_BODY = _BODY_X + _BODY_Y + _BODY_C3 + _BODY_C2
 
 
 def _derive(c1: bytes) -> bytes:
@@ -85,6 +122,7 @@ class TestConvert:
             FMT_C1C3C2: CT_C1C3C2,
             FMT_C1C2C3_04: CT_C1C2C3_04,
             FMT_C1C3C2_04: CT_C1C3C2_04,
+            FMT_DER: CT_DER,
         }
         out = convert(srcs[src], src, dst)
         assert out == srcs[dst]
@@ -112,6 +150,97 @@ class TestConvert:
     def test_short_ciphertext_rejected(self):
         with pytest.raises(Sm2CiphertextFormatError):
             convert(bytes(20), FMT_C1C2C3, FMT_C1C3C2)
+
+
+# --- DER（ASN.1，GM/T 0009 结构）---------------------------------------------
+
+
+class TestDerFormat:
+    def test_known_answer_vector(self):
+        # 手搓常量向量：INTEGER 1/2 解码后左补零 31 字节还原 C1 坐标
+        assert convert(DER_KNOWN, FMT_DER, FMT_C1C2C3) == CT_FROM_KNOWN
+
+    def test_impl_encoding_matches_handrolled(self):
+        # 实现编码与测试内独立手搓编码逐字节一致（双编码器交叉）
+        assert convert(CT_C1C2C3, FMT_C1C2C3, FMT_DER) == CT_DER
+
+    def test_detect_der(self):
+        assert detect_format(CT_DER) == FMT_DER
+        assert detect_format(DER_KNOWN) == FMT_DER
+
+    def test_detect_0x30_prefixed_raw_falls_back(self):
+        # 首字节恰为 0x30 的裸密文（DER 解析必败）→ 落回裸格式缺省旧序
+        raw30 = b"\x30" + CT_C1C2C3[1:]
+        assert detect_format(raw30) == FMT_C1C2C3
+
+    def test_leading_zero_coordinate_strip_and_restore(self):
+        # 本仓 C1x 以 0x00 开头——编码剥前导零（31 字节 INTEGER），解码补回
+        assert CT_DER[2] == 0x02 and CT_DER[3] == 31
+        assert convert(CT_DER, FMT_DER, FMT_C1C2C3)[:C1_LEN] == C1
+
+    def test_high_bit_coordinate_sign_byte(self):
+        # 坐标最高位为 1 → INTEGER 补 0x00 保正（33 字节），往返无损
+        c1_hb = b"\xff" + bytes(range(1, C1_LEN))
+        ct_hb = c1_hb + C2 + C3
+        der = convert(ct_hb, FMT_C1C2C3, FMT_DER)
+        assert der[2:5] == b"\x02\x21\x00"
+        assert convert(der, FMT_DER, FMT_C1C2C3) == ct_hb
+
+    def test_zero_coordinate_roundtrip(self):
+        # 全零坐标 → 最小 INTEGER 单字节 0x00，往返无损（结构层，在曲线校验之前）
+        c1_zero = b"\x00" * 32 + C1[32:]
+        ct_zero = c1_zero + C2 + C3
+        der = convert(ct_zero, FMT_C1C2C3, FMT_DER)
+        assert der[2:4] == b"\x02\x01"
+        assert convert(der, FMT_DER, FMT_C1C3C2) == c1_zero + C3 + C2
+
+    @pytest.mark.parametrize(
+        "bad,label",
+        [
+            (b"", "空输入"),
+            (CT_DER[:-1], "末字节截断"),
+            (b"\x31" + CT_DER[1:], "外层标签非 SEQUENCE"),
+            (CT_DER + b"\x05\x00", "SEQUENCE 后多余字节"),
+            (_local_tlv(0x30, _BODY + b"\x05\x00"), "SEQUENCE 内多余元素"),
+            (b"\x30\x81\x77" + _BODY, "长形长度非最小"),
+            (_local_tlv(0x30, _BODY_X + _BODY_Y + _local_tlv(0x04, C3[:31]) + _BODY_C2), "C3 长度 31"),
+            (_local_tlv(0x30, _BODY_X + _BODY_Y + _BODY_C3 + b"\x04\x00"), "C2 为空"),
+            (
+                _local_tlv(
+                    0x30,
+                    b"\x02\x21" + b"\x00" * 32 + b"\x01" + _BODY_Y + _BODY_C3 + _BODY_C2,
+                ),
+                "C1x 非最小编码（33 字节带多余前导零）",
+            ),
+            (
+                _local_tlv(
+                    0x30,
+                    b"\x02\x22" + b"\x00" * 33 + b"\x01" + _BODY_Y + _BODY_C3 + _BODY_C2,
+                ),
+                "C1x 超出曲线坐标范围（34 字节）",
+            ),
+        ],
+    )
+    def test_malformed_der_rejected(self, bad, label):
+        with pytest.raises(Sm2CiphertextFormatError):
+            convert(bad, FMT_DER, FMT_C1C2C3)
+
+    def test_malformed_der_detect_raises_or_falls_back(self):
+        # 畸形 DER 走 detect：空输入抛错；其余首字节 0x30 解析失败落回裸格式
+        with pytest.raises(Sm2CiphertextFormatError):
+            detect_format(b"")
+        assert detect_format(CT_DER[:-1]) == FMT_C1C2C3  # 截断后仍够裸格式最小长
+
+    def test_verify_c3_der(self):
+        assert verify_c3(CT_DER, FMT_DER, _derive) is True
+        # DER 内 C1/C3/C2 位置由结构固定，篡改 C2 末字节 → C3 复算不一致
+        bad = bytearray(CT_DER)
+        bad[-1] ^= 0xFF
+        assert verify_c3(bytes(bad), FMT_DER, _derive) is False
+
+    def test_verify_c3_malformed_der_rejected(self):
+        with pytest.raises(Sm2CiphertextFormatError):
+            verify_c3(CT_DER[:-1], FMT_DER, _derive)
 
 
 # --- verify_c3 ---------------------------------------------------------------
