@@ -2,13 +2,15 @@
 
 用法
 ----
-``sip-sm2cvt detect [HEX | --file 路径]``
-    启发式判别密文线格式（stdout 输出格式标识）。
+``sip-sm2cvt detect [HEX | --file 路径] [--b64]``
+    启发式判别密文线格式（stdout 输出格式标识，含 ASN.1 DER）。
 
-``sip-sm2cvt convert --from FMT --to FMT [HEX | --file 路径] [--out 路径]``
-    四种线格式间无损互转（stdout 输出转换后 hex）。
+``sip-sm2cvt convert --from FMT --to FMT [HEX | --file 路径] [--b64]
+[--out 路径] [--out-b64]``
+    五种线格式（四裸格式 + DER）间无损互转（stdout 输出转换后
+    hex，``--out-b64`` 时输出 base64）。
 
-``sip-sm2cvt verify --fmt FMT --privkey HEX [HEX | --file 路径]``
+``sip-sm2cvt verify --fmt FMT --privkey HEX [HEX | --file 路径] [--b64]``
     用解密方私钥重算 C3（GM/T 0003.4/.5）校验密文完整性，收口
     部分实现 decrypt 不校验 C3 的静默错解。
 
@@ -16,10 +18,12 @@
 
 约定
 -----
-- 输入优先级：位置参数 hex → ``--file``（hex 文本文件）→ stdin；
-  hex 容忍空白字符（换行/空格统一剥离）与 ``0x``/``0X`` 前缀；
-- stdout 恒为机器友好内容（格式标识 / 转换后 hex / 校验结论），
-  提示性说明走 stderr，便于管道脚本消费；
+- 输入优先级：位置参数 → ``--file``（文本文件）→ stdin；密文编码
+  缺省 hex（容忍空白字符与 ``0x``/``0X`` 前缀），``--b64`` 切换为
+  base64 通道（base64/base64url 自动判别，容忍空白与省略 padding）；
+- stdout 恒为机器友好内容（格式标识 / 转换后 hex 或 base64 / 校验
+  结论），提示性说明走 stderr，便于管道脚本消费；
+- ``--out-b64`` 输出标准 base64（含 padding，Java/JS 系互通行形态）；
 - 退出码：``0`` 成功（verify 通过）；``1`` verify 校验失败；
   ``2`` 输入/参数/格式错误（与 argparse 用法错误同码）；
 - 本工具属外部系统密文互通范畴，不定义不触碰 SIP-1.0 线协议
@@ -29,11 +33,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import sys
 from typing import Callable
 
 from ..crypto.sm2 import PRIVATE_KEY_LENGTH, SM2PrivateKey, SM2PublicKey
 from ..crypto.sm2_ciphertext import (
+    FMT_DER,
     KNOWN_FORMATS,
     Sm2CiphertextFormatError,
     convert,
@@ -47,15 +53,36 @@ __all__ = ["main"]
 # --- 输入解析 -------------------------------------------------------------
 
 
-def _load_hex(hex_arg: str | None, file_path: str | None) -> bytes:
-    """按 位置参数 → --file → stdin 的优先级读取并解析密文 hex。"""
+def _read_text(hex_arg: str | None, file_path: str | None) -> str:
+    """按 位置参数 → --file → stdin 的优先级读取原始输入文本。"""
     if hex_arg is not None and hex_arg != "-":
-        text = hex_arg
-    elif file_path is not None and file_path != "-":
+        return hex_arg
+    if file_path is not None and file_path != "-":
         with open(file_path, encoding="utf-8") as fh:
-            text = fh.read()
-    else:
-        text = sys.stdin.read()
+            return fh.read()
+    return sys.stdin.read()
+
+
+def _decode_b64(text: str) -> bytes:
+    """base64/base64url 自动判别解码：容忍空白与省略 padding，严格字母表。"""
+    cleaned = "".join(text.split())
+    if cleaned[:2].lower() == "0x":
+        raise ValueError("--b64 输入不应带 0x 前缀（那是 hex 通道的约定）")
+    normalized = cleaned.replace("-", "+").replace("_", "/")
+    normalized += "=" * (-len(normalized) % 4)
+    try:
+        return base64.b64decode(normalized, validate=True)
+    except ValueError as exc:  # binascii.Error 是 ValueError 子类
+        raise ValueError(f"输入不是合法 base64：{exc}") from exc
+
+
+def _load_ciphertext(hex_arg: str | None, file_path: str | None, b64: bool) -> bytes:
+    """读取并解码密文输入：缺省 hex 通道，``b64`` 时走 base64 通道。"""
+    text = _read_text(hex_arg, file_path)
+    if b64:
+        if not "".join(text.split()):
+            raise ValueError("输入为空——需要密文 base64（位置参数、--file 或 stdin）")
+        return _decode_b64(text)
     cleaned = "".join(text.split())
     if cleaned[:2].lower() == "0x":
         cleaned = cleaned[2:]
@@ -97,37 +124,36 @@ def _make_derive(priv: SM2PrivateKey) -> Callable[[bytes], bytes]:
 
 def _cmd_detect(args: argparse.Namespace) -> int:
     """detect：判别线格式，stdout 输出格式标识。"""
-    fmt = detect_format(_load_hex(args.hex, args.file))
+    fmt = detect_format(_load_ciphertext(args.hex, args.file, args.b64))
     print(fmt)
-    prefix_note = (
-        "已识别 0x04 前缀（前缀内顺序仍不可判）"
-        if fmt.endswith("+04")
-        else "未识别到 0x04 前缀（恒按旧序报告）"
-    )
-    print(
-        f"提示：{prefix_note}；C2/C3 顺序无法仅凭字节判别，" "需私钥复核时用 verify 子命令",
-        file=sys.stderr,
-    )
+    if fmt == FMT_DER:
+        note = "ASN.1 DER 结构完整解析（C1/C3/C2 元素位置由结构自证）"
+    elif fmt.endswith("+04"):
+        note = "已识别 0x04 前缀（前缀内顺序仍不可判）；C2/C3 顺序无法仅凭字节判别，需私钥复核时用 verify 子命令"
+    else:
+        note = "未识别到 0x04 前缀（恒按旧序报告）；C2/C3 顺序无法仅凭字节判别，需私钥复核时用 verify 子命令"
+    print(f"提示：{note}", file=sys.stderr)
     return 0
 
 
 def _cmd_convert(args: argparse.Namespace) -> int:
-    """convert：四格式无损互转，stdout 输出转换后 hex。"""
-    out = convert(_load_hex(args.hex, args.file), args.from_fmt, args.to_fmt)
-    hex_out = out.hex()
+    """convert：五格式无损互转，stdout 输出转换后 hex 或 base64。"""
+    out = convert(_load_ciphertext(args.hex, args.file, args.b64), args.from_fmt, args.to_fmt)
+    text_out = base64.b64encode(out).decode("ascii") if args.out_b64 else out.hex()
     if args.out is not None:
         with open(args.out, "w", encoding="utf-8") as fh:
-            fh.write(hex_out + "\n")
+            fh.write(text_out + "\n")
         print(f"已写入 {args.out}", file=sys.stderr)
     else:
-        print(hex_out)
+        print(text_out)
     return 0
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     """verify：重算 C3 校验密文完整性，退出码承载结论（0 通过 / 1 失败）。"""
     priv = SM2PrivateKey.from_private_bytes(_parse_privkey(args.privkey))
-    if verify_c3(_load_hex(args.hex, args.file), args.fmt, _make_derive(priv)):
+    ct = _load_ciphertext(args.hex, args.file, args.b64)
+    if verify_c3(ct, args.fmt, _make_derive(priv)):
         print(f"C3 校验通过（格式 {args.fmt}）")
         return 0
     print("C3 校验失败：C3 复算不一致——顺序错配或密文被篡改，可换另一顺序重试")
@@ -140,15 +166,20 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 def _add_input_args(parser: argparse.ArgumentParser) -> None:
     """三个子命令共用的密文输入参数。"""
     parser.add_argument("hex", nargs="?", help="密文 hex（缺省读 --file 或 stdin）")
-    parser.add_argument("--file", help="从文件读密文 hex 文本（'-' 亦表示 stdin）")
+    parser.add_argument("--file", help="从文件读密文文本（hex 或 base64，'-' 亦表示 stdin）")
+    parser.add_argument(
+        "--b64",
+        action="store_true",
+        help="输入按 base64 解码（base64/base64url 自动判别，容忍空白与省略 padding）",
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
     """构造子命令解析器。"""
     parser = argparse.ArgumentParser(
         prog="sip-sm2cvt",
-        description="SM2 加密密文四格式互转与 C3 校验（GM/T 0003.5 工程互通工具）",
-        epilog=f"格式标识：{' / '.join(KNOWN_FORMATS)}（C1 恒 64 字节 x‖y，C3 恒 32 字节 SM3）",
+        description="SM2 加密密文五格式互转与 C3 校验（GM/T 0003.5 工程互通工具）",
+        epilog=f"格式标识：{' / '.join(KNOWN_FORMATS)}（裸格式 C1 恒 64 字节 x‖y，C3 恒 32 字节 SM3；DER 为 ASN.1 变长结构）",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -156,7 +187,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_input_args(p_detect)
     p_detect.set_defaults(handler=_cmd_detect)
 
-    p_convert = sub.add_parser("convert", help="四种线格式间无损互转")
+    p_convert = sub.add_parser("convert", help="五种线格式间无损互转")
     p_convert.add_argument(
         "--from", dest="from_fmt", choices=KNOWN_FORMATS, required=True, help="源格式"
     )
@@ -164,7 +195,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--to", dest="to_fmt", choices=KNOWN_FORMATS, required=True, help="目标格式"
     )
     _add_input_args(p_convert)
-    p_convert.add_argument("--out", help="转换结果 hex 写入文件（缺省打印 stdout）")
+    p_convert.add_argument("--out", help="转换结果写入文件（缺省打印 stdout）")
+    p_convert.add_argument(
+        "--out-b64",
+        action="store_true",
+        help="输出按 base64 编码（缺省 hex；Java/JS 系互通行形态）",
+    )
     p_convert.set_defaults(handler=_cmd_convert)
 
     p_verify = sub.add_parser("verify", help="用解密方私钥重算 C3 校验密文完整性")

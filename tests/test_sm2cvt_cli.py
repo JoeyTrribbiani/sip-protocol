@@ -1,4 +1,4 @@
-"""sm2cvt CLI 冒烟测试：三子命令正负路径 + 文件/stdin 输入 + python -m 子进程。
+"""sm2cvt CLI 冒烟测试：三子命令正负路径 + DER 格式 + base64 通道 + 文件/stdin 输入 + python -m 子进程。
 
 密文向量为"真实曲线点"合成（C1 = [k]G 经 SM2PrivateKey 派生，KDF/C3 按
 GM/T 0003.4/.5 公式手拼），不依赖 gmssl；另有 gmssl 真实密文交叉冒烟
@@ -7,6 +7,7 @@ GM/T 0003.4/.5 公式手拼），不依赖 gmssl；另有 gmssl 真实密文交�
 
 from __future__ import annotations
 
+import base64
 import io
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import sys
 import pytest
 
 from sip_protocol.crypto.sm2 import SM2PrivateKey, SM2PublicKey
+from sip_protocol.crypto.sm2_ciphertext import FMT_C1C2C3, FMT_C1C3C2, FMT_DER, convert
 from sip_protocol.crypto.sm3 import sm3_hash
 from sip_protocol.tools.sm2cvt import main
 
@@ -43,6 +45,11 @@ C3 = sm3_hash(SHARED[:32] + _MSG + SHARED[32:])
 CT_C1C2C3_HEX = (C1 + C2 + C3).hex()
 CT_C1C3C2_HEX = (C1 + C3 + C2).hex()
 CT_C1C3C2_04_HEX = (b"\x04" + C1 + C3 + C2).hex()
+# DER 形态经库 convert 生成（编解码正确性由 test_sm2_ciphertext 交叉覆盖）
+CT_DER_HEX = convert(C1 + C2 + C3, FMT_C1C2C3, FMT_DER).hex()
+# base64 通道向量（标准 / urlsafe；互转仅 +/ ↔ -_）
+CT_B64 = base64.b64encode(bytes.fromhex(CT_C1C2C3_HEX)).decode()
+CT_B64_URL = base64.urlsafe_b64encode(bytes.fromhex(CT_C1C2C3_HEX)).decode()
 
 
 # --- detect -----------------------------------------------------------------
@@ -124,6 +131,108 @@ class TestConvertCli:
         assert exc.value.code == 2
 
 
+# --- DER 格式 ---------------------------------------------------------------
+
+
+class TestDerCli:
+    def test_detect_der(self, capsys):
+        assert main(["detect", CT_DER_HEX]) == 0
+        assert capsys.readouterr().out == "DER\n"
+
+    def test_convert_der_roundtrip(self, capsys):
+        # 裸格式 → DER → 新序裸格式：结构化解码后重排，链路无损
+        assert main(["convert", "--from", "C1C2C3", "--to", "DER", CT_C1C2C3_HEX]) == 0
+        assert capsys.readouterr().out.strip() == CT_DER_HEX
+        assert main(["convert", "--from", "DER", "--to", "C1C3C2", CT_DER_HEX]) == 0
+        assert capsys.readouterr().out.strip() == CT_C1C3C2_HEX
+
+    def test_verify_der_passes(self, capsys):
+        assert main(["verify", "--fmt", "DER", "--privkey", D_HEX, CT_DER_HEX]) == 0
+        assert "校验通过" in capsys.readouterr().out
+
+    def test_verify_der_tampered_exit_1(self, capsys):
+        bad = bytearray(bytes.fromhex(CT_DER_HEX))
+        bad[-1] ^= 0xFF
+        assert main(["verify", "--fmt", "DER", "--privkey", D_HEX, bytes(bad).hex()]) == 1
+
+    def test_convert_malformed_der_exit_2(self, capsys):
+        # 截断 DER：convert 声明 DER 时结构解析失败 → 退出码 2
+        assert main(["convert", "--from", "DER", "--to", "C1C3C2", CT_DER_HEX[:-2]]) == 2
+        assert "错误" in capsys.readouterr().err
+
+
+# --- base64 通道 --------------------------------------------------------------
+
+
+class TestBase64Cli:
+    def test_detect_b64_multiline(self, capsys):
+        # 换行折行的标准 base64（Java/JS 系常见行形态）统一容忍
+        wrapped = "\n".join(CT_B64[i : i + 24] for i in range(0, len(CT_B64), 24))
+        assert main(["detect", "--b64", wrapped]) == 0
+        assert capsys.readouterr().out == "C1C2C3\n"
+
+    def test_detect_b64url_without_padding(self, capsys):
+        # urlsafe 字母表（-_）且省略 padding——前置断言确保翻译路径被真实覆盖
+        assert "+" in CT_B64 or "/" in CT_B64
+        assert main(["detect", "--b64", CT_B64_URL.rstrip("=")]) == 0
+        assert capsys.readouterr().out == "C1C2C3\n"
+
+    def test_convert_b64_in_hex_out(self, capsys):
+        assert (
+            main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--b64", CT_B64]) == 0
+        )
+        assert capsys.readouterr().out.strip() == CT_C1C3C2_HEX
+
+    def test_convert_out_b64(self, capsys):
+        assert (
+            main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--out-b64", CT_C1C2C3_HEX])
+            == 0
+        )
+        out_b64 = capsys.readouterr().out.strip()
+        assert base64.b64decode(out_b64).hex() == CT_C1C3C2_HEX
+
+    def test_convert_b64_in_out_b64_file(self, tmp_path):
+        # --b64 入 + --out 文件 + --out-b64：文件落标准 base64 文本
+        target = tmp_path / "out.b64"
+        assert (
+            main(
+                [
+                    "convert",
+                    "--from",
+                    "C1C2C3",
+                    "--to",
+                    "DER",
+                    "--b64",
+                    CT_B64,
+                    "--out",
+                    str(target),
+                    "--out-b64",
+                ]
+            )
+            == 0
+        )
+        der = base64.b64decode(target.read_text(encoding="utf-8").strip())
+        assert der.hex() == CT_DER_HEX
+
+    def test_verify_b64_input(self, capsys):
+        assert main(["verify", "--fmt", "C1C2C3", "--privkey", D_HEX, "--b64", CT_B64]) == 0
+        assert "校验通过" in capsys.readouterr().out
+
+    def test_b64_invalid_exit_2(self, capsys):
+        assert main(["detect", "--b64", "!!!not-base64!!!"]) == 2
+        assert "base64" in capsys.readouterr().err
+
+    def test_b64_with_0x_prefix_exit_2(self, capsys):
+        # 0x 前缀是 hex 通道约定——喂给 --b64 视为误用，定向报错
+        assert main(["detect", "--b64", "0x" + CT_B64]) == 2
+        assert "0x" in capsys.readouterr().err
+
+    def test_b64_empty_input_exit_2(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdin", io.StringIO("\n"))
+        assert main(["detect", "--b64"]) == 2
+        assert "输入为空" in capsys.readouterr().err
+
+
 # --- verify -----------------------------------------------------------------
 
 
@@ -158,6 +267,10 @@ class TestVerifyCli:
     def test_privkey_bad_length_exit_2(self, capsys):
         assert main(["verify", "--fmt", "C1C2C3", "--privkey", "abcd", CT_C1C2C3_HEX]) == 2
         assert "私钥长度" in capsys.readouterr().err
+
+    def test_privkey_bad_hex_exit_2(self, capsys):
+        assert main(["verify", "--fmt", "C1C2C3", "--privkey", "zz" * 32, CT_C1C2C3_HEX]) == 2
+        assert "hex" in capsys.readouterr().err
 
 
 # --- python -m 子进程冒烟（用户真实通路） -------------------------------------
