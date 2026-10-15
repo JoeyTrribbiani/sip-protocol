@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-16
+
 ### 新增
 
 - **SM2 标准解密原语与 `sip-sm2cvt decrypt` 子命令（GM/T 0003.4/.5）**：
