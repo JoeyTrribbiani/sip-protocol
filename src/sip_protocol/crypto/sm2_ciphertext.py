@@ -20,7 +20,10 @@ GM/T 0003.5 只定义了密文各分量（C1 椭圆曲线点 / C2 密文 / C3 �
 - :func:`detect_format` —— 长度/首字节/结构启发式判别（DER 整结构解析）；
 - :func:`convert` —— 五种格式间无损互转；
 - :func:`verify_c3` —— 由共享点重算 KDF 密钥流与 C3（GM/T 0003.4/.5），
-  收口静默错解。
+  收口静默错解；
+- :func:`sm2_decrypt` / :func:`decrypt_ciphertext` —— GM/T 0003.4/.5
+  标准解密（KDF-SM3 密钥流 + C3 强制校验，不一致即抛错、绝不返回
+  未认证明文），供 CLI ``sip-sm2cvt decrypt`` 与外部互通消费。
 
 约定
 -----
@@ -35,7 +38,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..exceptions import Sm2CiphertextFormatError
+from ..exceptions import Sm2CiphertextFormatError, Sm2DecryptError
+from .sm2 import SM2PrivateKey, SM2PublicKey
 from .sm3 import sm3_hash
 
 __all__ = [
@@ -48,9 +52,12 @@ __all__ = [
     "FMT_DER",
     "KNOWN_FORMATS",
     "Sm2CiphertextFormatError",
+    "Sm2DecryptError",
     "detect_format",
     "convert",
     "verify_c3",
+    "sm2_decrypt",
+    "decrypt_ciphertext",
 ]
 
 # --- 长度常量 -------------------------------------------------------------
@@ -353,3 +360,92 @@ def verify_c3(
     half = C1_LEN // 2
     expect = hasher(shared[:half] + msg + shared[half:])
     return expect == c3
+
+
+def sm2_decrypt(privkey_int: int, c1_point: tuple[int, int], c2: bytes, c3: bytes) -> bytes:
+    """GM/T 0003.4/.5 标准 SM2 解密核心：还原明文并强制校验 C3。
+
+    流程（GB/T 32918.4 / GM/T 0003.4 第 9.2 节）：
+
+    1. 共享点 ``[d]C1 = (x2, y2)``——C1 经在曲线/非无穷远点校验，
+       私钥标量经 ``[1, n)`` 范围校验（均由 :mod:`crypto.sm2` 承载）；
+    2. ``t = KDF(x2‖y2, klen)``（SM3 计数器模式），标准要求 t 全零
+       即失败（概率 2^-256，防御性保留；空消息 klen=0 不在此列）；
+    3. ``M = C2 ⊕ t``；
+    4. 复算 ``C3 = Hash(x2‖M‖y2)``（SM3）与密文内 C3 比对，不一致
+       视为解密失败——顺序错配/密文被篡改/私钥不属此密文均落此处，
+       **绝不返回未认证明文**。
+
+    参数
+    ----
+    privkey_int:
+        解密方私钥标量 d（``[1, n)`` 内整数）。
+    c1_point:
+        密文椭圆曲线点 C1（ ``(x1, y1)`` 仿射坐标二元组）。
+    c2:
+        密文数据分量（长度即明文长度 klen）。
+    c3:
+        密文杂凑分量（32 字节 SM3）。
+
+    返回
+    ----
+    bytes —— 认证通过的明文 M。
+
+    异常
+    ----
+    Sm2DecryptError
+        C3 复算不一致（SIP-CRYPTO-005）或 KDF 密钥流全零。
+    ValueError
+        C1 不在推荐曲线上（或为无穷远点）、私钥标量越界——与
+        :mod:`crypto.sm2` 的既有校验同源。
+    """
+    # SM2PublicKey 构造即在曲线校验；SM2PrivateKey 构造即 [1, n) 校验
+    shared = SM2PrivateKey(privkey_int).exchange_point(SM2PublicKey(c1_point))
+    keystream = _kdf(shared, len(c2))
+    if c2 and not keystream.strip(b"\x00"):
+        raise Sm2DecryptError("KDF 密钥流全零——按 GM/T 0003.4 判定解密失败")
+    msg = bytes(a ^ b for a, b in zip(c2, keystream))
+    # C3 = Hash(x2 ‖ M ‖ y2)（GM/T 0003.5，消息居中；与 verify_c3 同一公式）
+    half = C1_LEN // 2
+    expect = sm3_hash(shared[:half] + msg + shared[half:])
+    if expect != c3:
+        raise Sm2DecryptError("C3 复算不一致——顺序错配或密文被篡改，可换另一顺序重试")
+    return msg
+
+
+def decrypt_ciphertext(ct: bytes, fmt: str, privkey_int: int) -> bytes:
+    """密文线字节 + 声明格式 + 私钥 → 明文（解析层 + 解密核心一站式）。
+
+    :func:`sm2_decrypt` 的编排入口：先按 ``fmt`` 解出 (C1, C2, C3)
+    三元组（五格式含 ASN.1 DER，解析失败抛
+    :class:`Sm2CiphertextFormatError`），再走标准解密。CLI
+    ``sip-sm2cvt decrypt`` 即本函数的消费面。
+
+    参数
+    ----
+    ct:
+        完整密文线字节。
+    fmt:
+        声明的线格式（KNOWN_FORMATS 之一）。
+    privkey_int:
+        解密方私钥标量 d（``[1, n)`` 内整数）。
+
+    返回
+    ----
+    bytes —— 认证通过的明文 M。
+
+    异常
+    ----
+    Sm2CiphertextFormatError
+        格式/长度非法、DER 结构非法。
+    Sm2DecryptError
+        C3 复算不一致或 KDF 密钥流全零。
+    ValueError
+        C1 不在曲线上、私钥标量越界。
+    """
+    c1, c2, c3 = _to_components(ct, fmt)
+    c1_point = (
+        int.from_bytes(c1[: C1_LEN // 2], "big"),
+        int.from_bytes(c1[C1_LEN // 2 :], "big"),
+    )
+    return sm2_decrypt(privkey_int, c1_point, c2, c3)

@@ -148,6 +148,23 @@ class Sm2CiphertextFormatError(CryptoError):
         super().__init__(message=message, **kwargs)
 
 
+@_register_error
+@dataclass
+class Sm2DecryptError(CryptoError):
+    """SM2 解密失败（C3 复算不一致或 KDF 密钥流全零）
+
+    crypto/sm2_ciphertext 标准解密路径使用（GM/T 0003.4/.5，外部系统
+    密文的工程互通，不涉 SIP-1.0 线协议自身）。C3 不一致典型原因是
+    密文顺序错配或被篡改，调用方可换另一顺序重试，故 recoverable
+    缺省 True。
+    """
+
+    def __init__(self, message: str = "SM2 解密失败", **kwargs: Any) -> None:
+        kwargs.setdefault("code", "SIP-CRYPTO-005")
+        kwargs.setdefault("recoverable", True)
+        super().__init__(message=message, **kwargs)
+
+
 # ==================== 协议层异常 ====================
 
 

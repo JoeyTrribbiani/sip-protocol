@@ -286,6 +286,7 @@ class TestErrorRegistry:
             "SIP-CRYPTO-002",
             "SIP-CRYPTO-003",
             "SIP-CRYPTO-004",
+            "SIP-CRYPTO-005",
             "SIP-PROTO-000",
             "SIP-PROTO-001",
             "SIP-PROTO-002",

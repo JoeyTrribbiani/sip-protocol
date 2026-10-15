@@ -1,4 +1,5 @@
-"""sm2_ciphertext 模块测试：五格式互转（含 ASN.1 DER）+ C3 校验 + 畸形输入 + gmssl 真实向量交叉验证。"""
+"""sm2_ciphertext 模块测试：五格式互转（含 ASN.1 DER）+ C3 校验 + GM/T 0003.4/.5
+标准解密（标准向量/边界/异常路径 + gmssl 双向交叉）+ 畸形输入。"""
 
 from __future__ import annotations
 
@@ -15,8 +16,11 @@ from sip_protocol.crypto.sm2_ciphertext import (
     FMT_DER,
     KNOWN_FORMATS,
     Sm2CiphertextFormatError,
+    Sm2DecryptError,
     convert,
+    decrypt_ciphertext,
     detect_format,
+    sm2_decrypt,
     verify_c3,
 )
 from sip_protocol.crypto.sm3 import sm3_hash
@@ -63,16 +67,19 @@ def _local_integer(v: bytes) -> bytes:
 
 def _local_der(c1: bytes, c2: bytes, c3: bytes) -> bytes:
     """GM/T 0009 ASN.1 密文 SEQUENCE{x, y, C3, C2} 手搓编码。"""
-    return _local_tlv(0x30, _local_integer(c1[:32]) + _local_integer(c1[32:]) +
-                      _local_tlv(0x04, c3) + _local_tlv(0x04, c2))
+    return _local_tlv(
+        0x30,
+        _local_integer(c1[:32])
+        + _local_integer(c1[32:])
+        + _local_tlv(0x04, c3)
+        + _local_tlv(0x04, c2),
+    )
 
 
 CT_DER = _local_der(C1, C2, C3)
 # 手搓已知答案向量（常量字节，独立于两套编码器）：INTEGER 1/2 → 坐标左补零 31 字节
 DER_KNOWN = bytes.fromhex("302c" + "020101" + "020102" + "0420" + "33" * 32 + "0402abcd")
-CT_FROM_KNOWN = (
-    (b"\x00" * 31 + b"\x01") + (b"\x00" * 31 + b"\x02") + b"\xab\xcd" + b"\x33" * 32
-)
+CT_FROM_KNOWN = (b"\x00" * 31 + b"\x01") + (b"\x00" * 31 + b"\x02") + b"\xab\xcd" + b"\x33" * 32
 # 畸形 DER 构造零件（基于手搓编码器的合法零件拼装）
 _BODY_X = _local_integer(C1[:32])
 _BODY_Y = _local_integer(C1[32:])
@@ -203,7 +210,10 @@ class TestDerFormat:
             (CT_DER + b"\x05\x00", "SEQUENCE 后多余字节"),
             (_local_tlv(0x30, _BODY + b"\x05\x00"), "SEQUENCE 内多余元素"),
             (b"\x30\x81\x77" + _BODY, "长形长度非最小"),
-            (_local_tlv(0x30, _BODY_X + _BODY_Y + _local_tlv(0x04, C3[:31]) + _BODY_C2), "C3 长度 31"),
+            (
+                _local_tlv(0x30, _BODY_X + _BODY_Y + _local_tlv(0x04, C3[:31]) + _BODY_C2),
+                "C3 长度 31",
+            ),
             (_local_tlv(0x30, _BODY_X + _BODY_Y + _BODY_C3 + b"\x04\x00"), "C2 为空"),
             (
                 _local_tlv(
@@ -343,3 +353,181 @@ class TestGmsslInterop:
         # 叠加 SEC1 0x04 前缀（部分库 wire 形态）后校验仍成立/仍能识错
         assert verify_c3(b"\x04" + ct_new, FMT_C1C3C2_04, derive) is True
         assert verify_c3(b"\x04" + ct_new, FMT_C1C2C3_04, derive) is False
+
+
+# --- sm2_decrypt / decrypt_ciphertext（GM/T 0003.4/.5 标准解密） ----------------
+
+# 标准向量：GM/T 0003.5-2012 附录 C 加密样例（GB/T 32918.4 同源文本，
+# OpenSSL test/sm2_internal_test.c 采用同款）——真实曲线点/真实 KDF/C3，
+# 与本实现零共享假设，任何曲线参数/KDF/C3 公式偏差此处即红。
+_STD_D = int.from_bytes(
+    bytes.fromhex("3945208F7B2144B13F36E38AC6D39F95889393692860B51A42FB81EF4DF7C5B8"),
+    "big",
+)
+_STD_MSG = b"encryption standard"  # 标准样例明文（19B）
+_STD_C1 = bytes.fromhex(
+    "04EBFC718E8D1798620432268E77FEB6415E2EDE0E073C0F4F640ECD2E149A73"
+    "E858F9D81E5430A57B36DAAB8F950A3C64E6EE6A63094D99283AFF767E124DF0"
+)
+_STD_C2 = bytes.fromhex("21886CA989CA9C7D58087307CA93092D651EFA")
+_STD_C3 = bytes.fromhex("59983C18F809E262923C53AEC295D30383B54E39D609D160AFCB1908D0BD8766")
+# OpenSSL 期望的 GM/T 0009 DER 密文整字节（SEQUENCE{x, y, C3, C2}）
+_STD_DER_OPENSSL = bytes.fromhex(
+    "307C0220"
+    + _STD_C1[:32].hex()
+    + "022100"
+    + _STD_C1[32:].hex()
+    + "0420"
+    + _STD_C3.hex()
+    + "0413"
+    + _STD_C2.hex()
+)
+
+
+def _kdf_ref(z: bytes, klen: int) -> bytes:
+    """KDF 独立复算（GM/T 0003.4 计数器模式，供测试内手搓加密）。"""
+    out = bytearray()
+    ct = 1
+    while len(out) < klen:
+        out += sm3_hash(z + ct.to_bytes(4, "big"))
+        ct += 1
+    return bytes(out[:klen])
+
+
+def _std_encrypt_fixed_k(d: bytes, k: bytes, msg: bytes) -> tuple[bytes, bytes, bytes]:
+    """测试专用确定性"加密"（GM/T 0003.4 公式手搓，k 固定）→ (C1, C2, C3)。
+
+    库内只提供解密原语；加密方仅为构造测试向量，不进产品代码。
+    """
+    from sip_protocol.crypto.sm2 import SM2PublicKey
+
+    c1 = SM2PrivateKey.from_private_bytes(k).public_key().public_bytes()[1:]
+    pub_d = SM2PrivateKey.from_private_bytes(d).public_key()
+    shared = SM2PrivateKey.from_private_bytes(k).exchange_point(
+        SM2PublicKey.from_public_bytes(pub_d.public_bytes())
+    )
+    keystream = _kdf_ref(shared, len(msg))
+    c2 = bytes(a ^ b for a, b in zip(msg, keystream))
+    c3 = sm3_hash(shared[: C1_LEN // 2] + msg + shared[C1_LEN // 2 :])
+    return c1, c2, c3
+
+
+# 本地确定性往返向量：真实曲线点 + 多块 KDF（明文 64B 跨两个 SM3 块）
+_RT_D = bytes(range(1, 33))
+_RT_K = bytes(range(0x21, 0x41))
+_RT_MSG = b"multi-block kdf message padding to sixty-four bytes!!"  # 54B
+
+_RT_C1, _RT_C2, _RT_C3 = _std_encrypt_fixed_k(_RT_D, _RT_K, _RT_MSG)
+
+
+class TestSm2Decrypt:
+    def test_standard_vector_core(self):
+        # 标准样例核心路径：d + (C1, C2, C3) → "encryption standard"
+        c1_point = (
+            int.from_bytes(_STD_C1[:32], "big"),
+            int.from_bytes(_STD_C1[32:], "big"),
+        )
+        assert sm2_decrypt(_STD_D, c1_point, _STD_C2, _STD_C3) == _STD_MSG
+
+    def test_standard_vector_all_wire_formats(self):
+        ct_c1c2c3 = _STD_C1 + _STD_C2 + _STD_C3
+        ct_prefixed = b"\x04" + ct_c1c2c3
+        for fmt, ct in (
+            (FMT_C1C2C3, ct_c1c2c3),
+            (FMT_C1C3C2, convert(ct_c1c2c3, FMT_C1C2C3, FMT_C1C3C2)),
+            (FMT_C1C2C3_04, ct_prefixed),
+            (FMT_C1C3C2_04, convert(ct_prefixed, FMT_C1C2C3_04, FMT_C1C3C2_04)),
+            (FMT_DER, convert(ct_c1c2c3, FMT_C1C2C3, FMT_DER)),
+        ):
+            assert decrypt_ciphertext(ct, fmt, _STD_D) == _STD_MSG, fmt
+
+    def test_standard_der_matches_openssl_bytes(self):
+        # 本库 DER 编码与 OpenSSL 期望字节逐字一致——跨实现字节级互通证据
+        ct_c1c2c3 = _STD_C1 + _STD_C2 + _STD_C3
+        assert convert(ct_c1c2c3, FMT_C1C2C3, FMT_DER) == _STD_DER_OPENSSL
+
+    def test_standard_openssl_der_directly_decryptable(self):
+        # OpenSSL 字节直喂（不经本库 convert）——外部密文进、明文出
+        assert decrypt_ciphertext(_STD_DER_OPENSSL, FMT_DER, _STD_D) == _STD_MSG
+
+    def test_local_roundtrip_multi_block_kdf(self):
+        # 自造向量往返：明文 54B 跨两个 KDF 块（计数器 ct=1,2）
+        c1_point = (
+            int.from_bytes(_RT_C1[:32], "big"),
+            int.from_bytes(_RT_C1[32:], "big"),
+        )
+        assert sm2_decrypt(int.from_bytes(_RT_D, "big"), c1_point, _RT_C2, _RT_C3) == _RT_MSG
+        ct = _RT_C1 + _RT_C2 + _RT_C3
+        assert decrypt_ciphertext(ct, FMT_C1C2C3, int.from_bytes(_RT_D, "big")) == _RT_MSG
+
+    def test_empty_message_roundtrip(self):
+        # klen=0 边界：KDF 输出空、C3 = Hash(x2‖‖y2)（裸格式层不可达，核心直测）
+        c1, c2, c3 = _std_encrypt_fixed_k(_RT_D, _RT_K, b"")
+        c1_point = (
+            int.from_bytes(c1[:32], "big"),
+            int.from_bytes(c1[32:], "big"),
+        )
+        assert c2 == b""
+        assert sm2_decrypt(int.from_bytes(_RT_D, "big"), c1_point, c2, c3) == b""
+
+    def test_wrong_privkey_raises_decrypt_error(self):
+        c1_point = (
+            int.from_bytes(_STD_C1[:32], "big"),
+            int.from_bytes(_STD_C1[32:], "big"),
+        )
+        with pytest.raises(Sm2DecryptError, match="C3 复算不一致"):
+            sm2_decrypt(int.from_bytes(bytes(32) + b"\x01", "big"), c1_point, _STD_C2, _STD_C3)
+
+    def test_tampered_c2_raises(self):
+        c1_point = (
+            int.from_bytes(_STD_C1[:32], "big"),
+            int.from_bytes(_STD_C1[32:], "big"),
+        )
+        bad_c2 = bytes([_STD_C2[0] ^ 0x01]) + _STD_C2[1:]
+        with pytest.raises(Sm2DecryptError, match="C3 复算不一致"):
+            sm2_decrypt(_STD_D, c1_point, bad_c2, _STD_C3)
+
+    def test_order_swapped_ciphertext_raises(self):
+        # 顺序错配（C1C3C2 字节当 C1C2C3 声明）→ C3 复算必不一致，拒绝返回垃圾明文
+        ct_swapped = convert(_STD_C1 + _STD_C2 + _STD_C3, FMT_C1C2C3, FMT_C1C3C2)
+        with pytest.raises(Sm2DecryptError, match="C3 复算不一致"):
+            decrypt_ciphertext(ct_swapped, FMT_C1C2C3, _STD_D)
+
+    def test_c1_not_on_curve_raises_value_error(self):
+        x_bad = int.from_bytes(_STD_C1[:32], "big") ^ 1  # 破坏低位 → 不在曲线
+        with pytest.raises(ValueError, match="曲线"):
+            sm2_decrypt(_STD_D, (x_bad, int.from_bytes(_STD_C1[32:], "big")), _STD_C2, _STD_C3)
+
+    def test_privkey_out_of_range_raises(self):
+        c1_point = (
+            int.from_bytes(_STD_C1[:32], "big"),
+            int.from_bytes(_STD_C1[32:], "big"),
+        )
+        with pytest.raises(ValueError, match="越界"):
+            sm2_decrypt(0, c1_point, _STD_C2, _STD_C3)
+
+    def test_decrypt_ciphertext_bad_format_raises(self):
+        with pytest.raises(Sm2CiphertextFormatError):
+            decrypt_ciphertext(_STD_C1 + _STD_C2, FMT_C1C2C3, _STD_D)  # 少 C3 段
+        with pytest.raises(Sm2CiphertextFormatError):
+            decrypt_ciphertext(_STD_DER_OPENSSL[:-2], FMT_DER, _STD_D)  # DER 截断
+
+
+@pytest.mark.skipif(not GMSSL_AVAILABLE, reason="gmssl dev 依赖缺失")
+class TestGmsslDecryptInterop:
+    """gmssl 真实加密 ↔ 本库 sm2_decrypt 双向互认（独立实现交叉验证）。"""
+
+    def test_gmssl_ciphertext_decrypts_locally(self):
+        priv = SM2PrivateKey.from_private_bytes(_INTEROP_D)
+        pub_xy = priv.public_key().public_bytes().hex()[2:]
+        for mode, fmt in ((0, FMT_C1C2C3), (1, FMT_C1C3C2)):
+            gm = gmssl_sm2.CryptSM2(private_key=_INTEROP_D.hex(), public_key="", mode=mode)
+            gm.public_key = pub_xy  # 绕开 gmssl 对 04 前缀公钥的误剥离缺陷
+            ct = gm.encrypt(_INTEROP_MSG)
+            assert decrypt_ciphertext(ct, fmt, int.from_bytes(_INTEROP_D, "big")) == _INTEROP_MSG
+
+    def test_local_ciphertext_decrypts_in_gmssl(self):
+        # 测试内手搓标准加密（固定 k）→ gmssl 反向解开——公式两实现互证
+        c1, c2, c3 = _std_encrypt_fixed_k(_INTEROP_D, _RT_K, _INTEROP_MSG)
+        gm = gmssl_sm2.CryptSM2(private_key=_INTEROP_D.hex(), public_key="", mode=0)
+        assert gm.decrypt(c1 + c2 + c3) == _INTEROP_MSG
