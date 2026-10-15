@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 新增
+
+- **SM2 标准解密原语与 `sip-sm2cvt decrypt` 子命令（GM/T 0003.4/.5）**：
+  库层新增 `crypto/sm2_ciphertext.sm2_decrypt(privkey_int, c1_point, c2, c3)`
+  ——KDF(x2‖y2)（SM3 计数器模式，GB/T 32918.4 / GM/T 0003.4 §9.2）还原
+  明文后**强制复算 C3=Hash(x2‖M‖y2)**，不一致抛 `Sm2DecryptError`
+  （SIP-CRYPTO-005，注册表同步），绝不返回未认证明文；另有编排入口
+  `decrypt_ciphertext(ct, fmt, privkey_int)` 复用五格式解析层（含
+  ASN.1 DER）。CLI 新增 `decrypt --fmt --privkey [--out-b64]`：输入通道
+  与 detect/convert/verify 一致（hex 缺省 / `--b64` / `--file` / stdin），
+  stdout 单行明文（缺省 hex，`--out-b64` 出 base64）；退出码 0 解出 /
+  1 C3 复算不一致（文案与 verify 失败路径逐字一致）/ 2 输入/格式错误。
+  此前解 SM2 密文需借 gmssl，现原生支持（MCP 四工具不动，不涉
+  SIP-1.0 线协议）。KDF 密钥流全零防御分支按标准保留（t 全零即失败；
+  空消息 klen=0 不误伤）。
+
+### SPEC-first 判定
+
+- 本变更无 SIP-1.0 wire 格式/密钥调度/错误语义变更，`docs/SPEC.md`
+  （v1.1）无需更新：SM2 解密属外部系统密文工程互通范畴（GM/T
+  0003.4/.5 标准范畴，与 2.4.0 引入 sm2cvt 同一判定）；ADR-001 决策
+  边界（"自研范围无签名/加密"）追加补记如实记述演进。
+
+### 测试
+
+- 515 → **541 passed**（+26：GM/T 0003.5-2012 附录 C 标准加密样例
+  （"encryption standard"，OpenSSL `test/sm2_internal_test.c` 同款；
+  本地已验 C1=[k]G、公钥=[d]G、明文还原、C3 复算四项自洽）直测
+  sm2_decrypt/decrypt_ciphertext 五格式全贯通、本库 DER 编码与
+  OpenSSL 期望字节逐字一致、OpenSSL DER 整字节直解；本地向量
+  roundtrip 含多块 KDF（54B 明文跨两个 SM3 块）与 klen=0 空消息
+  边界；错私钥/篡改 C2/顺序错配 → Sm2DecryptError、C1 不在曲线/
+  私钥越界 → ValueError、坏格式 → Sm2CiphertextFormatError；CLI 正负
+  路径（五格式 roundtrip、rc 0/1/2、DER+base64 通道、`--out-b64`、
+  stdin、`python -m` 子进程）；gmssl 双向交叉（gmssl 加密本库解 /
+  手搓标准加密 gmssl 解）；test_exceptions 注册表名单同步
+  SIP-CRYPTO-005）
+
 ## [2.5.0] - 2026-10-15
 
 ### 新增

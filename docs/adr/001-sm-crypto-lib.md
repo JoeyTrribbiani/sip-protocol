@@ -83,3 +83,17 @@
 - gmssl 全家桶：无 SM4-GCM、ECB 带填充、私有 API、纯 Python 性能（文件工件不可用）、传递依赖 pycryptodomex。
 - snowland-smx：维护度弱，无优势项。
 - GmSSL C 绑定：宿主机依赖，pip 分发不可自举。
+
+## 补记
+
+- **2026-10-15（SM2 标准解密）**：本 ADR 原决策将自研 SM2 范围限定为
+  "密钥生成 + [d]P 点乘，无签名/加密"。`sip-sm2cvt decrypt` 需求（此前解 SM2
+  密文须借 gmssl）将该边界扩展为**含 GM/T 0003.4/.5 标准解密**：
+  `crypto/sm2_ciphertext.sm2_decrypt` 复用同一套自研曲线运算（[d]C1 点乘 +
+  在曲线校验）与 KDF-SM3，明文还原后强制复算 C3（不一致抛
+  `Sm2DecryptError` SIP-CRYPTO-005，绝不返回未认证明文）。范围仍不含签名、
+  不含加密出口（加密仅为测试内固定 k 手搓向量），不涉 SIP-1.0 线协议——
+  决策 7 的"未来可平滑切换底层"论述对解密路径同样成立。标准向量锚点：
+  GM/T 0003.5-2012 附录 C 加密样例（OpenSSL `test/sm2_internal_test.c`
+  同款），DER 编码与 OpenSSL 期望字节逐字一致。
+

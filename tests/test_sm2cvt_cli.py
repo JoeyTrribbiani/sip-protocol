@@ -89,7 +89,16 @@ class TestConvertCli:
         target = tmp_path / "out.hex"
         assert (
             main(
-                ["convert", "--from", "C1C2C3", "--to", "C1C3C2", CT_C1C2C3_HEX, "--out", str(target)]
+                [
+                    "convert",
+                    "--from",
+                    "C1C2C3",
+                    "--to",
+                    "C1C3C2",
+                    CT_C1C2C3_HEX,
+                    "--out",
+                    str(target),
+                ]
             )
             == 0
         )
@@ -97,7 +106,9 @@ class TestConvertCli:
 
     def test_convert_from_file_whitespace_and_prefix(self, tmp_path):
         # hex 文本文件：换行/空格/0x 前缀/大写混合，统一容忍
-        chunked = "\n".join(CT_C1C2C3_HEX[i : i + 32].upper() for i in range(0, len(CT_C1C2C3_HEX), 32))
+        chunked = "\n".join(
+            CT_C1C2C3_HEX[i : i + 32].upper() for i in range(0, len(CT_C1C2C3_HEX), 32)
+        )
         src = tmp_path / "ct.hex"
         src.write_text("0X" + chunked + "\n", encoding="utf-8")
         assert main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--file", str(src)]) == 0
@@ -178,15 +189,12 @@ class TestBase64Cli:
         assert capsys.readouterr().out == "C1C2C3\n"
 
     def test_convert_b64_in_hex_out(self, capsys):
-        assert (
-            main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--b64", CT_B64]) == 0
-        )
+        assert main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--b64", CT_B64]) == 0
         assert capsys.readouterr().out.strip() == CT_C1C3C2_HEX
 
     def test_convert_out_b64(self, capsys):
         assert (
-            main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--out-b64", CT_C1C2C3_HEX])
-            == 0
+            main(["convert", "--from", "C1C2C3", "--to", "C1C3C2", "--out-b64", CT_C1C2C3_HEX]) == 0
         )
         out_b64 = capsys.readouterr().out.strip()
         assert base64.b64decode(out_b64).hex() == CT_C1C3C2_HEX
@@ -322,11 +330,119 @@ class TestGmsslInteropCli:
         return gm.encrypt(b"gmssl cli smoke").hex()
 
     def test_verify_real_ciphertext_passes(self, capsys):
-        assert (
-            main(["verify", "--fmt", "C1C2C3", "--privkey", D_HEX, self._gm_ciphertext(0)]) == 0
-        )
+        assert main(["verify", "--fmt", "C1C2C3", "--privkey", D_HEX, self._gm_ciphertext(0)]) == 0
 
     def test_verify_real_ciphertext_wrong_order_fails(self, capsys):
+        assert main(["verify", "--fmt", "C1C3C2", "--privkey", D_HEX, self._gm_ciphertext(0)]) == 1
+
+
+# --- decrypt -----------------------------------------------------------------
+
+# 标准向量（GM/T 0003.5-2012 附录 C，OpenSSL test/sm2_internal_test.c 同款）
+STD_D_HEX = "3945208F7B2144B13F36E38AC6D39F95889393692860B51A42FB81EF4DF7C5B8"
+STD_MSG_HEX = b"encryption standard".hex()
+STD_C1C2C3_HEX = (
+    "04EBFC718E8D1798620432268E77FEB6415E2EDE0E073C0F4F640ECD2E149A73"
+    "E858F9D81E5430A57B36DAAB8F950A3C64E6EE6A63094D99283AFF767E124DF0"
+    "21886CA989CA9C7D58087307CA93092D651EFA"
+    "59983C18F809E262923C53AEC295D30383B54E39D609D160AFCB1908D0BD8766"
+)
+
+
+class TestDecryptCli:
+    def test_standard_vector_bare(self, capsys):
+        # 国标样例走真实用户通路：hex 入 → 明文 hex 单行出
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", STD_D_HEX, STD_C1C2C3_HEX]) == 0
+        assert capsys.readouterr().out == STD_MSG_HEX + "\n"
+
+    def test_standard_vector_der_b64_channel_out_b64(self, capsys):
+        # DER 密文 base64 入 + --out-b64 出：跨通道全链路
+        der = convert(bytes.fromhex(STD_C1C2C3_HEX), "C1C2C3", "DER")
+        der_b64 = base64.b64encode(der).decode()
         assert (
-            main(["verify", "--fmt", "C1C3C2", "--privkey", D_HEX, self._gm_ciphertext(0)]) == 1
+            main(["decrypt", "--fmt", "DER", "--privkey", STD_D_HEX, "--b64", der_b64, "--out-b64"])
+            == 0
         )
+        assert capsys.readouterr().out.strip() == base64.b64encode(b"encryption standard").decode()
+
+    def test_all_five_formats_roundtrip(self, capsys):
+        # 五种声明格式各解一遍同一密文（库内合成向量）——解析层全贯通
+        c1c2c3 = bytes.fromhex(CT_C1C2C3_HEX)
+        cases = {
+            "C1C2C3": c1c2c3,
+            "C1C3C2": convert(c1c2c3, "C1C2C3", "C1C3C2"),
+            "C1C2C3+04": b"\x04" + c1c2c3,
+            "C1C3C2+04": convert(b"\x04" + c1c2c3, "C1C2C3+04", "C1C3C2+04"),
+            "DER": convert(c1c2c3, "C1C2C3", "DER"),
+        }
+        for fmt, ct in cases.items():
+            assert main(["decrypt", "--fmt", fmt, "--privkey", D_HEX, ct.hex()]) == 0, fmt
+            assert capsys.readouterr().out == _MSG.hex() + "\n", fmt
+
+    def test_wrong_privkey_exit_1_message_same_as_verify(self, capsys):
+        # 错私钥 → C3 复算必不一致；文案与 verify 失败路径逐字一致
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", "11" * 32, CT_C1C2C3_HEX]) == 1
+        assert capsys.readouterr().out == (
+            "C3 校验失败：C3 复算不一致——顺序错配或密文被篡改，可换另一顺序重试\n"
+        )
+
+    def test_wrong_order_exit_1(self, capsys):
+        # 旧序密文声明新序——静默错解场景，decrypt 拒绝返回垃圾明文
+        assert main(["decrypt", "--fmt", "C1C3C2", "--privkey", D_HEX, CT_C1C2C3_HEX]) == 1
+        assert "C3 校验失败" in capsys.readouterr().out
+
+    def test_tampered_c1_not_on_curve_exit_2(self, capsys):
+        # C1 篡改不在曲线上——进解密核心前即被校验拦下（与 verify 同源）
+        bad = bytearray(bytes.fromhex(CT_C1C2C3_HEX))
+        bad[0] ^= 0x01
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", D_HEX, bytes(bad).hex()]) == 2
+        assert "曲线" in capsys.readouterr().err
+
+    def test_malformed_der_exit_2(self, capsys):
+        assert main(["decrypt", "--fmt", "DER", "--privkey", D_HEX, CT_DER_HEX[:-2]]) == 2
+        assert "错误" in capsys.readouterr().err
+
+    def test_bad_hex_exit_2(self, capsys):
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", D_HEX, "zz"]) == 2
+        assert "错误" in capsys.readouterr().err
+
+    def test_bad_privkey_exit_2(self, capsys):
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", "abcd", CT_C1C2C3_HEX]) == 2
+        assert "私钥长度" in capsys.readouterr().err
+
+    def test_stdin_input(self, capsys, monkeypatch):
+        monkeypatch.setattr("sys.stdin", io.StringIO(CT_C1C2C3_HEX + "\n"))
+        assert main(["decrypt", "--fmt", "C1C2C3", "--privkey", D_HEX]) == 0
+        assert capsys.readouterr().out == _MSG.hex() + "\n"
+
+    def test_decrypt_via_python_m_subprocess(self):
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "sip_protocol.tools.sm2cvt",
+                "decrypt",
+                "--fmt",
+                "C1C2C3",
+                "--privkey",
+                STD_D_HEX,
+                STD_C1C2C3_HEX,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0
+        assert bytes.fromhex(proc.stdout.strip()) == b"encryption standard"
+
+
+@pytest.mark.skipif(not GMSSL_AVAILABLE, reason="gmssl dev 依赖缺失")
+class TestGmsslDecryptInteropCli:
+    def test_gmssl_ciphertext_decrypts_via_cli(self, capsys):
+        priv = SM2PrivateKey.from_private_bytes(bytes.fromhex(D_HEX))
+        pub_xy = priv.public_key().public_bytes().hex()[2:]
+        gm = gmssl_sm2.CryptSM2(private_key=D_HEX, public_key="", mode=1)
+        gm.public_key = pub_xy  # 绕开 gmssl 对 04 前缀公钥的误剥离缺陷
+        ct = gm.encrypt(b"gmssl decrypt via cli").hex()
+        assert main(["decrypt", "--fmt", "C1C3C2", "--privkey", D_HEX, ct]) == 0
+        assert bytes.fromhex(capsys.readouterr().out.strip()) == b"gmssl decrypt via cli"

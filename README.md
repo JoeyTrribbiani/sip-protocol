@@ -178,6 +178,28 @@ python -m sip_protocol --psk <shared-key> --agent-id <agent-id>
 
 注意：握手 `complete` 依赖同进程的 `initiator` 状态，宿主应使用长驻进程逐条收发请求。
 
+## 互通 CLI 工具
+
+标准协议互通调试（应用层，不涉 SIP-1.0 线协议；stdout 机器友好，退出码承载结论）：
+
+```bash
+# SM2 加密密文五格式互转与 C3 校验（GM/T 0003.5 工程互通层）
+sip-sm2cvt detect <hex>                        # 启发式判别线格式（四裸格式 + ASN.1 DER）
+sip-sm2cvt convert --from C1C2C3 --to DER <hex>   # 五格式无损互转（--b64 入 / --out-b64 出）
+sip-sm2cvt verify --fmt C1C3C2 --privkey <hex> <hex>   # 重算 C3，收口静默错解（rc 0/1）
+sip-sm2cvt decrypt --fmt DER --privkey <hex> <b64> --b64 --out-b64
+                                               # GM/T 0003.4/.5 标准解密：KDF-SM3 还原明文
+                                               # 后强制复算 C3，通过才输出（rc 0 解出/1 C3 不一致/2 输入错误）
+
+# 国密杂凑/派生互通计算（GM/T 0004 / RFC 2104 / RFC 5869）
+sip-gmcvt sm3 <text>                           # 缺省文本输入（--hex/--b64 切编码通道）
+sip-gmcvt hmac-sm3 --key <hex> <text>
+sip-gmcvt hkdf-sm3 --salt <hex> --info <hex> --len 32 <text>
+```
+
+两个工具亦可以模块方式运行（`python -m sip_protocol.tools.sm2cvt` / `...gmcvt`）；
+sm2cvt 的密文/私钥 hex 容忍 `0x` 前缀与空白，`--file`/stdin 输入同支持。
+
 ## dsh 接入
 
 本仓库根即一个 dsh 插件（`dsh-sip-protocol`，零部署纯声明式）：
@@ -222,7 +244,7 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile <profile> add <本仓库路�
 
 | 指标 | 值 |
 |------|------|
-| 测试用例 | 371 passed（含 26+28 互操作双套件 + 88 国密用例 + 3 规范索引校验） |
+| 测试用例 | 541 passed（含 26+28 互操作双套件 + 88 国密用例 + 81 SM2 密文工具 + 51 sm2cvt CLI + 38 gmcvt CLI + 3 规范索引校验） |
 | 覆盖率 | 89% |
 | Pylint | 10.00/10 |
 | MyPy | 0 errors |

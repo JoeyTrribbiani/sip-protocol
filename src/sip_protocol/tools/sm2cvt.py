@@ -14,6 +14,12 @@
     用解密方私钥重算 C3（GM/T 0003.4/.5）校验密文完整性，收口
     部分实现 decrypt 不校验 C3 的静默错解。
 
+``sip-sm2cvt decrypt --fmt FMT --privkey HEX [HEX | --file 路径] [--b64]
+[--out-b64]``
+    GM/T 0003.4/.5 标准 SM2 解密：KDF(x2‖y2)（SM3）还原明文后强制
+    复算 C3，认证通过才输出（stdout 单行，缺省 hex，``--out-b64``
+    出 base64）——原生解密，不再依赖 gmssl。
+
 亦可以模块方式运行：``python -m sip_protocol.tools.sm2cvt``（子命令同上）。
 
 约定
@@ -22,10 +28,11 @@
   缺省 hex（容忍空白字符与 ``0x``/``0X`` 前缀），``--b64`` 切换为
   base64 通道（base64/base64url 自动判别，容忍空白与省略 padding）；
 - stdout 恒为机器友好内容（格式标识 / 转换后 hex 或 base64 / 校验
-  结论），提示性说明走 stderr，便于管道脚本消费；
+  结论 / 明文 hex 或 base64），提示性说明走 stderr，便于管道脚本消费；
 - ``--out-b64`` 输出标准 base64（含 padding，Java/JS 系互通行形态）；
-- 退出码：``0`` 成功（verify 通过）；``1`` verify 校验失败；
-  ``2`` 输入/参数/格式错误（与 argparse 用法错误同码）；
+- 退出码：``0`` 成功（verify 通过 / decrypt 解出明文）；``1`` verify
+  校验失败 / decrypt C3 复算不一致（错误信息同 verify）；``2`` 输入/
+  参数/格式错误（与 argparse 用法错误同码）；
 - 本工具属外部系统密文互通范畴，不定义不触碰 SIP-1.0 线协议
   （见 ``crypto/sm2_ciphertext.py`` 模块说明）。
 """
@@ -42,7 +49,9 @@ from ..crypto.sm2_ciphertext import (
     FMT_DER,
     KNOWN_FORMATS,
     Sm2CiphertextFormatError,
+    Sm2DecryptError,
     convert,
+    decrypt_ciphertext,
     detect_format,
     verify_c3,
 )
@@ -160,6 +169,21 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_decrypt(args: argparse.Namespace) -> int:
+    """decrypt：标准解密并输出明文（hex 或 base64 单行），C3 不一致退出码 1。"""
+    privkey_int = int.from_bytes(_parse_privkey(args.privkey), "big")
+    ct = _load_ciphertext(args.hex, args.file, args.b64)
+    try:
+        msg = decrypt_ciphertext(ct, args.fmt, privkey_int)
+    except Sm2DecryptError as exc:
+        # 文案与 verify 失败路径逐字一致（SIP 错误码前缀不进 CLI 输出）
+        print(f"C3 校验失败：{exc.message}")
+        return 1
+    text_out = base64.b64encode(msg).decode("ascii") if args.out_b64 else msg.hex()
+    print(text_out)
+    return 0
+
+
 # --- 入口 -----------------------------------------------------------------
 
 
@@ -212,6 +236,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_args(p_verify)
     p_verify.set_defaults(handler=_cmd_verify)
+
+    p_decrypt = sub.add_parser(
+        "decrypt", help="GM/T 0003.5 标准解密（C3 强制校验，输出明文 hex 或 base64）"
+    )
+    p_decrypt.add_argument("--fmt", choices=KNOWN_FORMATS, required=True, help="声明的线格式")
+    p_decrypt.add_argument(
+        "--privkey",
+        required=True,
+        help=f"解密方私钥 hex（{PRIVATE_KEY_LENGTH} 字节，容忍 0x 前缀）",
+    )
+    _add_input_args(p_decrypt)
+    p_decrypt.add_argument(
+        "--out-b64",
+        action="store_true",
+        help="明文按 base64 输出（缺省 hex；stdout 单行）",
+    )
+    p_decrypt.set_defaults(handler=_cmd_decrypt)
 
     return parser
 
